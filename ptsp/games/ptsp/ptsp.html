@@ -1,0 +1,244 @@
+<html>
+
+<head>
+<title>PTSP: The Physical Travelling Salesperson Problem</title>
+<style type="text/css">
+  h2 {text-align: center; color: blue}
+  body {margin: 2em}
+  h3 {color: magenta}
+  pre {margin: 2em; background: #EEFFFF; border: solid; border-color: cyan}
+  td {text-align: center}
+</style>
+</head>
+
+<body>
+<table border="1" cellpadding="0" cellspacing="0" style="border-collapse: collapse" bordercolor="#111111" width="100%" id="AutoNumber1">
+  <tr>
+    <td>
+<img border="0" src="directions.png" width="83" height="85" /></td>
+    <td>
+<h2>PTSP: The Physical Travelling Salesperson Problem</h2>
+
+<p align="center">Simon M. Lucas</p>
+
+    <p>&nbsp;</td>
+    <td>
+<img border="0" src="directions.png" width="83" height="85" /></td>
+  </tr>
+</table>
+
+<h3>Contents</h3>
+<ul>
+  <li><a href="#Introduction">Introduction</a></li>
+  <li><a href="#Specification">Specification</a></li>
+  <li><a href="#Simulation">Simulation</a></li>
+  <li><a href="#Source Code">Source Code</a></li>
+  <li><a href="#File Formats">File Formats</a></li>
+  <li><a href="#Submission Server">Submission Server</a></li>
+  <li><a href="#Hints">Hints</a></li>
+  <li><a href="#Related Ideas">Related Ideas</a></li>
+</ul>
+
+<h3><a name="Introduction">Introduction</a></h3>
+<p>The travelling salesperson problem is one of the most widely studied optimisation 
+problems, and there are a plethora of clever algorithms and meta-heuristics 
+for finding good solutions.&#160; Close to optimal routes can now be found for 
+problems involving thousands of cities.&#160; For an idea of the current state 
+of the art see the <a href="http://www.research.att.com/~dsj/chtsp/">DIMACS 8th 
+TSP Implementation Challenge</a>.</p>
+<p>The objective in the standard TSP is to minimise the total distance 
+travelled.&nbsp; The PTSP adds a simple twist that has far-reaching effects: the 
+salesman has mass, and moves by choosing a force vector (see below) to apply to 
+the mass at each point in time.</p>
+
+<p>The objective now is to minimise the number of time steps taken to visit all 
+the cities.&#160; If two solutions tie on this, the tie-breaker is the solution 
+that uses the least force i.e. that minimises the number of non-zero force vectors.&nbsp; The 
+screenshot below shows a <a href="route723.txt">sample run</a> - this took 723 
+time steps (it is far from optimal!).</p>
+
+<p align="center"><img border="0" src="route.png" width="328" height="274"></p>
+
+<h3><a name="Specification">Specification</a></h3>
+
+<p>The problem is specified on a 2d grid.&#160; The input to your algorithm is a 
+set of cities, each specified by it's x-y position.&#160; Each x-y city 
+co-ordinate is an integer, using the standard VGA range (640 x 480).&#160; S.I. 
+units are used for all measures; for screen display, 1 pixel corresponds to 1 meter.</p>
+
+<ul>
+  <li>The mass of the salesperson is 1 kilogram.</li>
+  <li>The salesperson begins in the middle of the district (position 320,240) 
+  with zero velocity.</li>
+  <li>At each time-step there are 5 possible choices: apply zero force, or apply 
+  +/-1 Newton in X or Y direction.</li>
+  <li>The physics is simulated using Newton&apos;s equations for velocity and 
+  displacement: v = u + at; s = ut + 1/2 at^2.</li>
+  <li>The equations are integrated every 0.1 seconds.</li>
+  <li>The salesperson, and each city has a radius of 5 meters; the salesperson 
+  has to just touch a city to visit it.&#160; There are no collisions.</li>
+</ul>
+
+<p>The output of your algorithm is the selected x-y force to apply at each time-step.&#160; 
+These forces are illustrated below.&#160; The co-ordinates have the screen 
+interpretation of&#160; x: positive right; y : positive down.
+</p>
+
+<div align="center">
+<table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse" bordercolor="#111111" id="AutoNumber2">
+  <tr>
+    <td width="50%">
+<img border="0" src="directions.png" width="179" height="185" /></td>
+    <td width="50%">
+
+<p align="center">
+&nbsp;</p>
+
+<p>
+</p>
+
+<p>
+</p>
+
+<p>
+</p>
+
+<div align="center">
+<table border="1" cellpadding="0" cellspacing="0" style="border-collapse: collapse" bordercolor="#111111">
+  <tbody>
+  <tr>
+    <th>Force Vector Id</th>
+    <th>x,y (Newtons)</th>
+  </tr>
+  <tr>
+    <td>0</td>
+    <td>0, 0</td>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>0,-1</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>1, 0</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>0, 1</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>-1, 0</td>
+  </tr>
+</tbody>
+</table>
+</div>
+
+
+    <p>&nbsp;</td>
+  </tr>
+</table>
+</div>
+<p align="center">
+&nbsp;</p>
+
+
+<h3><a name="Simulation">Simulation</a></h3>
+
+<p>The algorithm for checking a route is specified as follows:</p>
+
+<pre> Input: Set of cities, list of force vectors for each time step
+ Initialise position to INIT_POSITION
+ Initialise velocity to ZERO
+&#160;for each force_t at each time step {
+   update position(force_t)
+   update velocity(force_t)
+   remove all cities touched by new position
+ }
+ Output is the set of remaining cities: for a valid solution, should be the empty set.</pre>
+
+<p>The reference simulation is implemented in Java using double precision 
+arithmetic.</p>
+
+<h3><a name="Source Code">Source Code</a></h3>
+
+<p dir="ltr"><i>Source code available imminently (it's all written and here in 
+this directory, but it also references other Java files elsewhere, which need to 
+be added to a zip file)</i></p>
+
+<p dir="ltr"><i>Main files are here</i></p>
+
+<ul>
+  <li dir="ltr">
+
+<p dir="ltr"><i><a href="Map.java">Map.java</a></i></li>
+<li dir="ltr">
+
+<p dir="ltr"><i><a href="Run.java">Run.java</a></i></li>
+</ul>
+
+<h3><a name="File Formats">File Formats</a></h3>
+
+<h4>Input</h4>
+
+<p>The first line of the file is the number of cities, then each line is the x-y 
+position of a city.&#160; For example, a five city problem might look like this:</p>
+
+<pre>5
+120 3
+100 100
+340 250
+345 470
+567 345
+</pre>
+<p>A sample set of cities (for the above screen shot) is <a href="cities723.txt">
+here</a>.</p>
+
+<h4>Solution</h4>
+
+<p>A solution is a statement of the number of steps taken, 
+followed by the selected force vector for each step: for example:</p>
+
+<pre>368
+1
+2
+2
+2
+4
+0
+0
+...</pre>
+<p>A sample solution for the above set of cities is <a href="route723.txt">here</a>.</p>
+
+<h3><a name="Submission Server">Submission Server</a></h3>
+
+<p><i>Under construction.&nbsp; You will soon be able to upload your solutions 
+to particular problem instances, and see them validated and ranked in a league 
+table.</i></p>
+
+<h3><a name="Hints">Hints</a></h3>
+
+<p>You might try solving it as a conventional TSP, then working out a set of 
+force vectors that would steer that route.&nbsp; However, a glance at typical 
+optimal TSP solutions indicate a high degree of curvature, which may be unlikely 
+to form a good basis for PTSP solutions.</p>
+
+<h3><a name="Related Ideas">Related Ideas</a></h3>
+
+<p>The physics model is simple, and similar to that used for the Cellz challenge 
+for GECCO 2004, and also similar to XQuest, the classic MAC and PC game.&#160; </p>
+
+<p>I had the idea for this problem while attempting the <i>Crystal Collection 
+Challenge</i> for <a href="http://www.vugames.com/product.do?gamePlatformId=433">
+Crash Nitro Kart</a>&#160; (I&apos;ve still only managed to collect 16 out of 
+the 20 
+crystals...).</p>
+
+<p>I&apos;d like to thank <a href="http://cswww.essex.ac.uk/staff/tsang.htm">Edward Tsang</a> and 
+<a href="http://www.essex.ac.uk/maths/staff/johnston/">Mark Johnston</a> for their feedback and 
+encouragement on this 
+idea.</p>
+
+</body>
+
+</html>
