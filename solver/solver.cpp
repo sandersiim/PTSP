@@ -78,23 +78,23 @@ public:
 
 vector<Action> actions;
 
-struct chromosome {
+struct Chromosome {
     double P;
     double I;
     double D;
     double predict;
 };
 
-chromosome chromo = { 10, 0, 3, 2};
 Vector integral;
 Vector prevError;
 
-void getFout(const State & st, State & next, size_t target) {
-    Vector t = cities[target];
-    double dist = distSqr(t, st.pos);
+void getFout(const State & st, State & next, const Vector & target,
+             const Chromosome & chromo)
+{
+    //double dist = distSqr(target, st.pos);
     Vector predictedPos = st.pos + (st.speed * chromo.predict);
 
-    Vector posError = t - predictedPos;
+    Vector posError = target - predictedPos;
     Vector derivate = (posError - prevError) / dt;
     integral += posError * dt;
 
@@ -117,10 +117,78 @@ void getFout(const State & st, State & next, size_t target) {
     actions.push_back(act);
 }
 
-int main(int argc, char**argv) {
+using Pilot = vector<Chromosome>;
 
+mt19937 ranEng;
+
+const size_t populationSize = 500;
+vector<Pilot> population;
+
+void initPopulation() {
+    random_device d;
+    ranEng.seed(d());
+    uniform_real_distribution<> dist(0, 20);
+    auto g = bind(dist, ranEng);
+    population.resize(populationSize);
+    size_t nrOfChromos = cities.size();
+    for (auto & p : population) {
+        p.resize(nrOfChromos);
+        for (auto & c : p) {
+            c.P = g();
+            c.I = g();
+            c.D = g();
+            c.predict = g();
+        }
+    }
+}
+
+double evaluate(const Pilot & p) {
+    actions.clear();
+    State start;
+    start.pos = Vector(160, 120);
+    start.visited.resize(cities.size());
+    State next = start;
+    State tmp = start;
+
+    for (size_t i = 0; i < cities.size(); ++i) {
+        integral = 0;
+        prevError = 0;
+        do {
+            getFout(tmp, next, cities[i], p[i]);
+            tmp = next;
+        } while (!next.visited[i] && next.time < 2000);
+    }
+    return 1.0/actions.size();
+}
+
+struct FitPilot {
+    FitPilot (Pilot & p, double f) : fitness(f), pilot(&p) { }
+    double fitness;
+    Pilot * pilot;
+    bool operator< (const FitPilot & r) const {
+        return fitness < r.fitness;
+    }
+};
+
+priority_queue<FitPilot> testedPilots;
+
+void evaluateIndividuals() {
+    testedPilots=priority_queue<FitPilot>();
+    for (auto & p : population) {
+        double fitness = evaluate(p);
+        testedPilots.emplace(FitPilot(p,fitness));
+    }
+}
+
+void naturalSelection() {
+}
+
+void recombine() {
+}
+
+void readInput(const char *file) {
     ifstream f;
-    f.open(string(argv[1]));
+    f.open(file);
     int n;
     f >> n;
 
@@ -130,21 +198,9 @@ int main(int argc, char**argv) {
     }
 
     f.close();
+}
 
-    State start;
-    start.pos = Vector(160, 120);
-    start.visited.resize(cities.size());
-    State next = start;
-    State tmp = start;
-
-    for (size_t i = 0; i < cities.size(); ++i) {
-        do {
-        getFout(tmp, next, i);
-        tmp = next;
-        } while (!next.visited[i] && next.time < 2000);
-        cout << "Visited city " << i << endl;
-    }
-
+void printResult() {
     ofstream out;
     out.open("result.txt");
     out << actions.size() << endl;
@@ -154,6 +210,24 @@ int main(int argc, char**argv) {
     }
 
     out.close();
+}
+
+int main(int argc, char**argv) {
+
+    readInput(argv[1]);
+
+    initPopulation();
+    for (size_t i = 0; i < 1; ++i) {
+        evaluateIndividuals();
+        naturalSelection();
+        recombine();
+    }
+
+    evaluateIndividuals();
+    Pilot & p = *testedPilots.top().pilot;
+    evaluate(p);
+
+    printResult();
 
     return 0;
 }
