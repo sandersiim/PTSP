@@ -4,46 +4,15 @@
 #include <set>
 #include <queue>
 #include <cmath>
+#include <random>
+#include <functional>
+#include <queue>
+#include "vector.h"
 
 using namespace std;
 
 const double dt = 0.31622776601683794; // sqrt(0.1)
 const double rad = 5;
-
-struct Vector {
-    Vector () : x(0), y(0) {}
-    Vector(double x, double y) : x(x), y(y) {}
-    double x;
-    double y;
-
-    Vector & operator+= (const Vector & rhs) {
-        x += rhs.x;
-        y += rhs.y;
-        return *this;
-    }
-    friend Vector operator+ (const Vector & lhs, const Vector & rhs) {
-        return Vector(lhs.x + rhs.x, lhs.y + rhs.y);
-    }
-    friend Vector operator- (const Vector & lhs, const Vector & rhs) {
-        return Vector(lhs.x - rhs.x, lhs.y - rhs.y);
-    }
-    friend Vector operator* (const Vector & lhs, double s) {
-        return Vector(lhs.x * s, lhs.y * s);
-    }
-    friend Vector operator/ (const Vector & lhs, double s) {
-        return Vector(lhs.x / s, lhs.y / s);
-    }
-    friend Vector operator* (double s, const Vector & rhs) {
-        return Vector(rhs.x * s, rhs.y * s);
-    }
-};
-
-std::ostream& operator<<(std::ostream& os, const Vector& v)
-{
-    // write obj to stream
-    os << v.x << " " << v.y;
-    return os;
-}
 
 vector<Vector> cities;
 
