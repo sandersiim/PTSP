@@ -6,6 +6,7 @@
 #include <cmath>
 #include <random>
 #include <functional>
+#include <algorithm>
 #include <queue>
 #include "vector.h"
 
@@ -13,6 +14,11 @@ using namespace std;
 
 const double dt = 0.31622776601683794; // sqrt(0.1)
 const double rad = 5;
+
+mt19937 ranEng;
+uniform_real_distribution<> dist(0, 20);
+
+const size_t populationSize = 300;
 
 vector<Vector> cities;
 
@@ -85,6 +91,13 @@ struct Chromosome {
     double predict;
 };
 
+std::ostream& operator<<(std::ostream& os, const Chromosome& c)
+{
+    // write obj to stream
+    os << "{" << c.P << ", " << c.I << ", " << c.D << ", " << c.predict << "}";
+    return os;
+}
+
 Vector integral;
 Vector prevError;
 
@@ -113,32 +126,37 @@ void getFout(const State & st, State & next, const Vector & target,
         act = output.x > 0 ? RIGHT : LEFT;
     }
     next = State(st, act);
-    cout << act << "\t" << output << "\t" << next.pos <<  endl;
     actions.push_back(act);
 }
 
 using Pilot = vector<Chromosome>;
 
-mt19937 ranEng;
+void printPilot(const Pilot & pl) {
+    for (auto & c : pl) {
+        cout << c;
+    }
+    cout << endl;
+}
 
-const size_t populationSize = 500;
 vector<Pilot> population;
+
+void initPilot(Pilot & p) {
+    for (auto & c : p) {
+        c.P = dist(ranEng);
+        c.I = dist(ranEng);
+        c.D = dist(ranEng);
+        c.predict = dist(ranEng);
+    }
+}
 
 void initPopulation() {
     random_device d;
     ranEng.seed(d());
-    uniform_real_distribution<> dist(0, 20);
-    auto g = bind(dist, ranEng);
     population.resize(populationSize);
     size_t nrOfChromos = cities.size();
     for (auto & p : population) {
         p.resize(nrOfChromos);
-        for (auto & c : p) {
-            c.P = g();
-            c.I = g();
-            c.D = g();
-            c.predict = g();
-        }
+        initPilot(p);
     }
 }
 
@@ -158,7 +176,10 @@ double evaluate(const Pilot & p) {
             tmp = next;
         } while (!next.visited[i] && next.time < 2000);
     }
-    return 1.0/actions.size();
+    if (next.time == 2000)
+        return 0.01;
+    double visited = accumulate(next.visited.begin(), next.visited.end(), 0.0);
+    return 1.0/actions.size() + visited;
 }
 
 struct FitPilot {
@@ -170,20 +191,73 @@ struct FitPilot {
     }
 };
 
-priority_queue<FitPilot> testedPilots;
+int findSelect(const vector<bool> & selected, int & index, bool p) {
+    while (index < populationSize && selected[index] == p) {
+        ++index;
+    }
+    if (index == populationSize) {
+        return -1;
+    }
+    return index++;
+}
 
-void evaluateIndividuals() {
-    testedPilots=priority_queue<FitPilot>();
-    for (auto & p : population) {
-        double fitness = evaluate(p);
-        testedPilots.emplace(FitPilot(p,fitness));
+void crossover(const Pilot & p1, const Pilot & p2, Pilot & c1, Pilot & c2) {
+    uniform_int_distribution<> dis(0, cities.size() - 1);
+    int i1 = dis(ranEng);
+    int i2 = dis(ranEng);
+    int from = min(i1,i2);
+    int to = max(i1,i2);
+    for (int i = 0; i < cities.size(); ++i) {
+        if (i >= to && i <= from) {
+            c1[i] = p2[i];
+            c2[i] = p1[i];
+        }
+        else {
+            c1[i] = p1[i];
+            c2[i] = p2[i];
+        }
     }
 }
 
-void naturalSelection() {
-}
-
-void recombine() {
+void evaluateIndividuals() {
+    vector<double> fitness;
+    fitness.resize(populationSize);
+    for (size_t i = 0; i < populationSize; ++i) {
+       fitness[i] = evaluate(population[i]);
+    }
+    cout << *max_element(fitness.begin(), fitness.end()) << endl;
+    discrete_distribution<int> selection(fitness.begin(), fitness.end());
+    vector<bool> selected;
+    selected.resize(populationSize);
+    cout << "selection:" ;
+    for (size_t i = 0; i < populationSize / 2; ++i) {
+        int s;
+        do {
+            s = selection(ranEng);
+        } while (selected[s]);
+        cout << s << " ";
+        selected[s] = true;
+    }
+    cout << endl;
+    int firstRemaining = 0;
+    int firstFree = 0;
+    for(;;) {
+        int p1 = findSelect(selected, firstRemaining, true);
+        int p2 = findSelect(selected, firstRemaining, true);
+        int c1 = findSelect(selected, firstFree, false);
+        int c2 = findSelect(selected, firstFree, false);
+        if (max(fitness[c1], fitness[c2]) > min(fitness[p1], fitness[2]))
+            continue;
+        if (p2 == -1 || c2 == -1)
+            break;
+        cout << "fit: " << fitness[p1] << " " << fitness[p2] << " " << fitness[c1]
+            << " " << fitness[c2] << endl;
+        crossover(population[p1], population[p2], population[c1], population[c2]);
+    }
+    int free;
+    while ((free = findSelect(selected, firstFree, false)) != -1) {
+        initPilot(population[free]);
+    }
 }
 
 void readInput(const char *file) {
@@ -212,19 +286,30 @@ void printResult() {
     out.close();
 }
 
+Pilot & findBestPilot() {
+    double bestfit = 0;
+    Pilot * best = nullptr;
+    double fit;
+    for (auto & p : population) {
+        fit = evaluate(p);
+        if (fit > bestfit) {
+            bestfit = fit;
+            best = &p;
+        }
+    }
+    return *best;
+}
+
 int main(int argc, char**argv) {
 
     readInput(argv[1]);
 
     initPopulation();
-    for (size_t i = 0; i < 1; ++i) {
+    for (size_t i = 0; i < 100; ++i) {
         evaluateIndividuals();
-        naturalSelection();
-        recombine();
     }
 
-    evaluateIndividuals();
-    Pilot & p = *testedPilots.top().pilot;
+    Pilot & p = findBestPilot();
     evaluate(p);
 
     printResult();
