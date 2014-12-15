@@ -12,19 +12,22 @@
 
 using namespace std;
 
-const double dt = 0.31622776601683794; // sqrt(0.1)
+const double dt = 0.1; // sqrt(0.1)
 const double rad = 5;
 
 mt19937 ranEng;
-uniform_real_distribution<> distP(0, 500);
+uniform_real_distribution<> distP(0, 50);
 uniform_real_distribution<> distI(0, 40);
-uniform_real_distribution<> distD(0, 100);
-uniform_real_distribution<> distPre(0, 8);
+uniform_real_distribution<> distD(0, 50);
+uniform_real_distribution<> distPre(0, 20);
 
-const size_t populationSize = 2000;
-const size_t numberOfParents = 600;
-const size_t numberOfNew = 50;
-const size_t cutOff = 100;
+const size_t populationSize = 200;
+const size_t numberOfParents = 160;
+const size_t numberOfNew = 80;
+const size_t cutOff = 78;
+
+int optMax = 3;
+int optMin = 0;
 
 vector<Vector> cities;
 
@@ -67,22 +70,12 @@ public:
     State () : time(0) { }
     State (const State & prev, Action act) : action(act), prevState(&prev) {
         Vector a = toVect(act);
-        speed = prev.speed + a * dt;
+        speed = prev.speed + a;
         pos = prev.pos + prev.speed * dt + 0.5 * a * dt * dt;
-        visited.resize(prev.visited.size());
-        for (size_t i = 0; i < visited.size(); ++i) {
-            if (prev.visited[i]) {
-                visited[i] = true;
-            }
-            else if (touched(pos, i)) {
-                visited[i] = true;
-            }
-        }
         time = prev.time + 1;
     }
     Vector pos;
     Vector speed;
-    vector<bool> visited;
     const State * prevState = nullptr;
     Action action;
     int time;
@@ -144,41 +137,25 @@ void printPilot(const Pilot & pl) {
 }
 
 vector<Pilot> population;
+normal_distribution<double> normalDist(0,1);
+uniform_int_distribution<> geneDist(0,3);
 
 void mutateChromo(Chromosome & c) {
-    uniform_int_distribution<> dis(0,3);
-    double mean;
-    int gene = dis(ranEng);
+    int gene = geneDist(ranEng);
+    double value = normalDist(ranEng);
 
     switch (gene) {
         case 0:
-            mean = c.P;
+            c.P += value;
             break;
         case 1:
-            mean = c.I;
+            c.I += value;
             break;
         case 2:
-            mean = c.D;
+            c.D += value;
             break;
         case 3:
-            mean = c.predict;
-            break;
-    }
-    normal_distribution<double> nd(mean);
-    double value = nd(ranEng);
-
-    switch (gene) {
-        case 0:
-            c.P = value;
-            break;
-        case 1:
-            c.I = value;
-            break;
-        case 2:
-            c.D = value;
-            break;
-        case 3:
-            c.predict = value;
+            c.predict += value;
             break;
     }
 }
@@ -213,34 +190,42 @@ double evaluate(const Pilot & p) {
     actions.clear();
     State start;
     start.pos = Vector(160, 120);
-    start.visited.resize(cities.size());
-    State next = start;
-    State tmp = start;
+    State next;
+    State cur = start;
 
     double time;
     int cutMult = 0;
+
+    int visited = 0;
+    bool cityReached;
 
     for (size_t i = 0; i < cities.size(); ++i) {
         integral = 0;
         prevError = 0;
         ++cutMult;
+        cityReached = false;
         do {
-            getFout(tmp, next, cities[i], p[i]);
-            tmp = next;
-        } while (!next.visited[i] && next.time < cutOff * cutMult);
-        if (next.time < cutOff * cutMult) {
+            getFout(cur, next, cities[i], p[i]);
+            cur = next;
+            if (touched(cur.pos, i)) {
+                cityReached = true;
+                ++visited;
+            }
+        } while (!cityReached && cur.time < cutOff * cutMult);
+        if (cur.time < cutOff * cutMult) {
             time = next.time;
         }
+        else {
+            break;
+        }
     }
-    double visited = accumulate(next.visited.begin(), next.visited.end(), 0.0);
-    visited /= 100;
-    if (next.time >= cutOff * cutMult) {
+    if (visited < cities.size()) {
         countFail++;
         double t = (1.0 / (time + cutOff)) + visited;
         //cout << "fail: " << t << endl;
         return t;
     }
-    return (1.0 / actions.size()) + visited;
+    return (1.0 / (time + cutOff)) + visited;
 }
 
 struct FitPilot {
@@ -253,10 +238,10 @@ struct FitPilot {
     }
 };
 
+uniform_int_distribution<> crossOverDist(0, optMax);
 void crossover(const Pilot & p1, const Pilot & p2, Pilot & c1, Pilot & c2) {
-    uniform_int_distribution<> dis(0, cities.size() - 1);
-    int i1 = dis(ranEng);
-    int i2 = dis(ranEng);
+    int i1 = crossOverDist(ranEng);
+    int i2 = crossOverDist(ranEng);
     int from = min(i1,i2);
     int to = max(i1,i2);
     for (int i = 0; i < cities.size(); ++i) {
@@ -289,9 +274,9 @@ void naturalSelection(vector<double> & fitness, vector<Pilot> & parents,
     }
 }
 
+uniform_int_distribution<> disParents(0, numberOfParents - 1);
+uniform_int_distribution<> disPart(optMin, optMax);
 void reproduce(vector<FitPilot> & parents) {
-    uniform_int_distribution<> disParents(0, numberOfParents - 1);
-    uniform_int_distribution<> disPart(0, cities.size() - 1);
     for (int i = 0; i < populationSize; i += 2) {
         if (i < numberOfNew) {
             auto & p = *parents[disParents(ranEng)].pilot;
@@ -358,13 +343,24 @@ int main(int argc, char**argv) {
     fitness.resize(populationSize);
     parents.resize(numberOfParents);
     parentFitness.resize(numberOfParents);
-    for (size_t i = 0; i < 200; ++i) {
+    for (size_t i = 0; i < 1000; ++i) {
         evaluateIndividuals(fitness);
         naturalSelection(fitness, parents, parentFitness);
         reproduce(parentFitness);
-        cout << *max_element(fitness.begin(), fitness.end()) << "\t" 
-            << accumulate(fitness.begin(), fitness.end(), 0.0) / populationSize
-            << "\tfailes: " << countFail << endl;
+        double bestFitness = *max_element(fitness.begin(), fitness.end());
+        double avgFitness = accumulate(fitness.begin(), fitness.end(), 0.0)
+                / populationSize;
+        cout << bestFitness << "\t" << avgFitness << "\tfailes: "
+            << countFail << endl;
+#if 1
+        optMax = min<int>(cities.size() - 1, bestFitness + 1);
+        optMin = max<int>(avgFitness - 2, 0);
+#else
+        optMax = cities.size() - 1;
+        optMin = 0;
+#endif
+        crossOverDist = uniform_int_distribution<> (optMin, optMax);
+        disPart = uniform_int_distribution<> (optMin, optMax);
     }
 
     Pilot & p = findBestPilot();
