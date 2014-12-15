@@ -16,9 +16,15 @@ const double dt = 0.31622776601683794; // sqrt(0.1)
 const double rad = 5;
 
 mt19937 ranEng;
-uniform_real_distribution<> dist(0, 20);
+uniform_real_distribution<> distP(0, 500);
+uniform_real_distribution<> distI(0, 40);
+uniform_real_distribution<> distD(0, 100);
+uniform_real_distribution<> distPre(0, 8);
 
-const size_t populationSize = 300;
+const size_t populationSize = 2000;
+const size_t numberOfParents = 600;
+const size_t numberOfNew = 50;
+const size_t cutOff = 100;
 
 vector<Vector> cities;
 
@@ -104,7 +110,6 @@ Vector prevError;
 void getFout(const State & st, State & next, const Vector & target,
              const Chromosome & chromo)
 {
-    //double dist = distSqr(target, st.pos);
     Vector predictedPos = st.pos + (st.speed * chromo.predict);
 
     Vector posError = target - predictedPos;
@@ -140,12 +145,54 @@ void printPilot(const Pilot & pl) {
 
 vector<Pilot> population;
 
+void mutateChromo(Chromosome & c) {
+    uniform_int_distribution<> dis(0,3);
+    double mean;
+    int gene = dis(ranEng);
+
+    switch (gene) {
+        case 0:
+            mean = c.P;
+            break;
+        case 1:
+            mean = c.I;
+            break;
+        case 2:
+            mean = c.D;
+            break;
+        case 3:
+            mean = c.predict;
+            break;
+    }
+    normal_distribution<double> nd(mean);
+    double value = nd(ranEng);
+
+    switch (gene) {
+        case 0:
+            c.P = value;
+            break;
+        case 1:
+            c.I = value;
+            break;
+        case 2:
+            c.D = value;
+            break;
+        case 3:
+            c.predict = value;
+            break;
+    }
+}
+
+void initChromo(Chromosome & c) {
+    c.P = distP(ranEng);
+    c.I = distI(ranEng);
+    c.D = distD(ranEng);
+    c.predict = distPre(ranEng);
+}
+
 void initPilot(Pilot & p) {
     for (auto & c : p) {
-        c.P = dist(ranEng);
-        c.I = dist(ranEng);
-        c.D = dist(ranEng);
-        c.predict = dist(ranEng);
+        initChromo(c);
     }
 }
 
@@ -160,6 +207,8 @@ void initPopulation() {
     }
 }
 
+int countFail=0;
+
 double evaluate(const Pilot & p) {
     actions.clear();
     State start;
@@ -168,21 +217,34 @@ double evaluate(const Pilot & p) {
     State next = start;
     State tmp = start;
 
+    double time;
+    int cutMult = 0;
+
     for (size_t i = 0; i < cities.size(); ++i) {
         integral = 0;
         prevError = 0;
+        ++cutMult;
         do {
             getFout(tmp, next, cities[i], p[i]);
             tmp = next;
-        } while (!next.visited[i] && next.time < 2000);
+        } while (!next.visited[i] && next.time < cutOff * cutMult);
+        if (next.time < cutOff * cutMult) {
+            time = next.time;
+        }
     }
-    if (next.time == 2000)
-        return 0.01;
     double visited = accumulate(next.visited.begin(), next.visited.end(), 0.0);
-    return 1.0/actions.size() + visited;
+    visited /= 100;
+    if (next.time >= cutOff * cutMult) {
+        countFail++;
+        double t = (1.0 / (time + cutOff)) + visited;
+        //cout << "fail: " << t << endl;
+        return t;
+    }
+    return (1.0 / actions.size()) + visited;
 }
 
 struct FitPilot {
+    FitPilot () { }
     FitPilot (Pilot & p, double f) : fitness(f), pilot(&p) { }
     double fitness;
     Pilot * pilot;
@@ -190,16 +252,6 @@ struct FitPilot {
         return fitness < r.fitness;
     }
 };
-
-int findSelect(const vector<bool> & selected, int & index, bool p) {
-    while (index < populationSize && selected[index] == p) {
-        ++index;
-    }
-    if (index == populationSize) {
-        return -1;
-    }
-    return index++;
-}
 
 void crossover(const Pilot & p1, const Pilot & p2, Pilot & c1, Pilot & c2) {
     uniform_int_distribution<> dis(0, cities.size() - 1);
@@ -219,45 +271,40 @@ void crossover(const Pilot & p1, const Pilot & p2, Pilot & c1, Pilot & c2) {
     }
 }
 
-void evaluateIndividuals() {
-    vector<double> fitness;
-    fitness.resize(populationSize);
+void evaluateIndividuals(vector<double> & fitness) {
+    countFail = 0;
     for (size_t i = 0; i < populationSize; ++i) {
        fitness[i] = evaluate(population[i]);
     }
-    cout << *max_element(fitness.begin(), fitness.end()) << endl;
+}
+
+void naturalSelection(vector<double> & fitness, vector<Pilot> & parents,
+                      vector<FitPilot> & parentFitness)
+{
     discrete_distribution<int> selection(fitness.begin(), fitness.end());
-    vector<bool> selected;
-    selected.resize(populationSize);
-    cout << "selection:" ;
-    for (size_t i = 0; i < populationSize / 2; ++i) {
-        int s;
-        do {
-            s = selection(ranEng);
-        } while (selected[s]);
-        cout << s << " ";
-        selected[s] = true;
+    for (size_t i = 0; i < numberOfParents; ++i) {
+        int s = selection(ranEng);
+        parents[i] = population[s];
+        parentFitness[i] = FitPilot(parents[i], fitness[i]);
     }
-    cout << endl;
-    int firstRemaining = 0;
-    int firstFree = 0;
-    for(;;) {
-        int p1 = findSelect(selected, firstRemaining, true);
-        int p2 = findSelect(selected, firstRemaining, true);
-        int c1 = findSelect(selected, firstFree, false);
-        int c2 = findSelect(selected, firstFree, false);
-        if (max(fitness[c1], fitness[c2]) > min(fitness[p1], fitness[2]))
-            continue;
-        if (p2 == -1 || c2 == -1)
-            break;
-        cout << "fit: " << fitness[p1] << " " << fitness[p2] << " " << fitness[c1]
-            << " " << fitness[c2] << endl;
-        crossover(population[p1], population[p2], population[c1], population[c2]);
+}
+
+void reproduce(vector<FitPilot> & parents) {
+    uniform_int_distribution<> disParents(0, numberOfParents - 1);
+    uniform_int_distribution<> disPart(0, cities.size() - 1);
+    for (int i = 0; i < populationSize; i += 2) {
+        if (i < numberOfNew) {
+            auto & p = *parents[disParents(ranEng)].pilot;
+            mutateChromo(p[disPart(ranEng)]);
+            population[i] = p;
+        }
+        else {
+            crossover(*parents[disParents(ranEng)].pilot,
+                    *parents[disParents(ranEng)].pilot,
+                    population[i], population[i+1]);
+        }
     }
-    int free;
-    while ((free = findSelect(selected, firstFree, false)) != -1) {
-        initPilot(population[free]);
-    }
+
 }
 
 void readInput(const char *file) {
@@ -305,12 +352,24 @@ int main(int argc, char**argv) {
     readInput(argv[1]);
 
     initPopulation();
-    for (size_t i = 0; i < 100; ++i) {
-        evaluateIndividuals();
+    vector<double> fitness;
+    vector<Pilot> parents;
+    vector<FitPilot> parentFitness;
+    fitness.resize(populationSize);
+    parents.resize(numberOfParents);
+    parentFitness.resize(numberOfParents);
+    for (size_t i = 0; i < 200; ++i) {
+        evaluateIndividuals(fitness);
+        naturalSelection(fitness, parents, parentFitness);
+        reproduce(parentFitness);
+        cout << *max_element(fitness.begin(), fitness.end()) << "\t" 
+            << accumulate(fitness.begin(), fitness.end(), 0.0) / populationSize
+            << "\tfailes: " << countFail << endl;
     }
 
     Pilot & p = findBestPilot();
-    evaluate(p);
+    cout << evaluate(p) << endl;
+    cout << actions.size() << endl;
 
     printResult();
 
