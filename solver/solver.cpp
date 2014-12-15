@@ -16,14 +16,14 @@ const double dt = 0.1; // sqrt(0.1)
 const double rad = 5;
 
 mt19937 ranEng;
-uniform_real_distribution<> distP(0, 50);
-uniform_real_distribution<> distI(0, 40);
+uniform_real_distribution<> distP(0, 80);
+uniform_real_distribution<> distI(0, 2);
 uniform_real_distribution<> distD(0, 50);
-uniform_real_distribution<> distPre(0, 20);
+uniform_real_distribution<> distPre(0, 2);
 
-const size_t populationSize = 200;
-const size_t numberOfParents = 160;
-const size_t numberOfNew = 80;
+const size_t populationSize = 20000;
+const size_t numberOfParents = 1400;
+const size_t numberOfNew = 800;
 const size_t cutOff = 78;
 
 int optMax = 3;
@@ -127,15 +127,9 @@ void getFout(const State & st, State & next, const Vector & target,
     actions.push_back(act);
 }
 
-using Pilot = vector<Chromosome>;
+using Pilot = Chromosome;
 
-void printPilot(const Pilot & pl) {
-    for (auto & c : pl) {
-        cout << c;
-    }
-    cout << endl;
-}
-
+Pilot bestPilot;
 vector<Pilot> population;
 normal_distribution<double> normalDist(0,1);
 uniform_int_distribution<> geneDist(0,3);
@@ -167,20 +161,12 @@ void initChromo(Chromosome & c) {
     c.predict = distPre(ranEng);
 }
 
-void initPilot(Pilot & p) {
-    for (auto & c : p) {
-        initChromo(c);
-    }
-}
-
 void initPopulation() {
     random_device d;
     ranEng.seed(d());
     population.resize(populationSize);
-    size_t nrOfChromos = cities.size();
     for (auto & p : population) {
-        p.resize(nrOfChromos);
-        initPilot(p);
+        initChromo(p);
     }
 }
 
@@ -205,7 +191,7 @@ double evaluate(const Pilot & p) {
         ++cutMult;
         cityReached = false;
         do {
-            getFout(cur, next, cities[i], p[i]);
+            getFout(cur, next, cities[i], p);
             cur = next;
             if (touched(cur.pos, i)) {
                 cityReached = true;
@@ -221,11 +207,11 @@ double evaluate(const Pilot & p) {
     }
     if (visited < cities.size()) {
         countFail++;
-        double t = (1.0 / (time + cutOff)) + visited;
+        double t = (1.0 / (time + cutOff)) + visited / 1000.0;
         //cout << "fail: " << t << endl;
         return t;
     }
-    return (1.0 / (time + cutOff)) + visited;
+    return (1.0 / (time + cutOff)) + visited / 1000.0;
 }
 
 struct FitPilot {
@@ -238,22 +224,8 @@ struct FitPilot {
     }
 };
 
-uniform_int_distribution<> crossOverDist(0, optMax);
+uniform_int_distribution<> crossOverDist(0, 3);
 void crossover(const Pilot & p1, const Pilot & p2, Pilot & c1, Pilot & c2) {
-    int i1 = crossOverDist(ranEng);
-    int i2 = crossOverDist(ranEng);
-    int from = min(i1,i2);
-    int to = max(i1,i2);
-    for (int i = 0; i < cities.size(); ++i) {
-        if (i >= to && i <= from) {
-            c1[i] = p2[i];
-            c2[i] = p1[i];
-        }
-        else {
-            c1[i] = p1[i];
-            c2[i] = p2[i];
-        }
-    }
 }
 
 void evaluateIndividuals(vector<double> & fitness) {
@@ -280,16 +252,13 @@ void reproduce(vector<FitPilot> & parents) {
     for (int i = 0; i < populationSize; i += 2) {
         if (i < numberOfNew) {
             auto & p = *parents[disParents(ranEng)].pilot;
-            mutateChromo(p[disPart(ranEng)]);
+            mutateChromo(p);
             population[i] = p;
         }
         else {
-            crossover(*parents[disParents(ranEng)].pilot,
-                    *parents[disParents(ranEng)].pilot,
-                    population[i], population[i+1]);
+            population[i] = *parents[disParents(ranEng)].pilot;
         }
     }
-
 }
 
 void readInput(const char *file) {
@@ -343,11 +312,12 @@ int main(int argc, char**argv) {
     fitness.resize(populationSize);
     parents.resize(numberOfParents);
     parentFitness.resize(numberOfParents);
-    for (size_t i = 0; i < 1000; ++i) {
+    for (size_t i = 0; i < 10; ++i) {
         evaluateIndividuals(fitness);
         naturalSelection(fitness, parents, parentFitness);
         reproduce(parentFitness);
-        double bestFitness = *max_element(fitness.begin(), fitness.end());
+        auto bf = max_element(fitness.begin(), fitness.end());
+        double bestFitness = *bf;
         double avgFitness = accumulate(fitness.begin(), fitness.end(), 0.0)
                 / populationSize;
         cout << bestFitness << "\t" << avgFitness << "\tfailes: "
@@ -366,6 +336,7 @@ int main(int argc, char**argv) {
     Pilot & p = findBestPilot();
     cout << evaluate(p) << endl;
     cout << actions.size() << endl;
+    cout << p << endl;
 
     printResult();
 
