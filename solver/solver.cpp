@@ -9,79 +9,25 @@
 #include <algorithm>
 #include <queue>
 #include "vector.h"
+#include "util.h"
 
 using namespace std;
 
-const double dt = 0.1; // sqrt(0.1)
-const double rad = 5;
-
 mt19937 ranEng;
-uniform_real_distribution<> distP(0, 80);
-uniform_real_distribution<> distI(0, 2);
-uniform_real_distribution<> distD(0, 50);
-uniform_real_distribution<> distPre(0, 2);
+uniform_real_distribution<> distP(-8, 80);
+uniform_real_distribution<> distI(-2, 2);
+uniform_real_distribution<> distD(-5, 50);
+uniform_real_distribution<> distPre(-2, 4);
 
 const size_t populationSize = 20000;
 const size_t numberOfParents = 1400;
-const size_t numberOfNew = 800;
+const size_t numberOfNew = 8000;
 const size_t cutOff = 78;
 
 int optMax = 3;
 int optMin = 0;
 
 vector<Vector> cities;
-
-inline double distSqr(const Vector & l, const Vector & r) {
-    double xd = l.x - r.x;
-    double yd = l.y - r.y;
-    return xd*xd + yd*yd;
-}
-
-enum Action {
-    NOP,
-    UP,
-    RIGHT,
-    DOWN,
-    LEFT
-};
-
-inline Vector toVect(Action & a) {
-    switch (a) {
-        case UP:
-            return Vector(0,-1);
-        case DOWN:
-            return Vector(0,1);
-        case LEFT:
-            return Vector(-1,0);
-        case RIGHT:
-            return Vector(1,0);
-    }
-    return Vector(0,0);
-}
-
-inline bool touched(const Vector & p, size_t index) {
-    double xd = cities[index].x - p.x;
-    double yd = cities[index].y - p.y;
-    return xd * xd + yd * yd < rad * rad;
-}
-
-class State {
-public:
-    State () : time(0) { }
-    State (const State & prev, Action act) : action(act), prevState(&prev) {
-        Vector a = toVect(act);
-        speed = prev.speed + a;
-        pos = prev.pos + prev.speed * dt + 0.5 * a * dt * dt;
-        time = prev.time + 1;
-    }
-    Vector pos;
-    Vector speed;
-    const State * prevState = nullptr;
-    Action action;
-    int time;
-};
-
-vector<Action> actions;
 
 struct Chromosome {
     double P;
@@ -100,10 +46,10 @@ std::ostream& operator<<(std::ostream& os, const Chromosome& c)
 Vector integral;
 Vector prevError;
 
-void getFout(const State & st, State & next, const Vector & target,
-             const Chromosome & chromo)
+void getFout(Vector & pos, Vector & speed, const Vector & target,
+             const Chromosome & chromo, vector<Action> *actions)
 {
-    Vector predictedPos = st.pos + (st.speed * chromo.predict);
+    Vector predictedPos = pos + (speed * chromo.predict);
 
     Vector posError = target - predictedPos;
     Vector derivate = (posError - prevError) / dt;
@@ -123,8 +69,10 @@ void getFout(const State & st, State & next, const Vector & target,
     if (ay > 0.9) {
         act = output.x > 0 ? RIGHT : LEFT;
     }
-    next = State(st, act);
-    actions.push_back(act);
+    applyAction(pos, speed, act);
+    if (actions != nullptr) {
+        actions->push_back(act);
+    }
 }
 
 using Pilot = Chromosome;
@@ -172,12 +120,9 @@ void initPopulation() {
 
 int countFail=0;
 
-double evaluate(const Pilot & p) {
-    actions.clear();
-    State start;
-    start.pos = Vector(160, 120);
-    State next;
-    State cur = start;
+double evaluate(const Pilot & p, vector<Action> *path) {
+    Vector pos(160, 120);
+    Vector speed;
 
     double time;
     int cutMult = 0;
@@ -185,21 +130,22 @@ double evaluate(const Pilot & p) {
     int visited = 0;
     bool cityReached;
 
+    int actions = 0;
     for (size_t i = 0; i < cities.size(); ++i) {
         integral = 0;
         prevError = 0;
         ++cutMult;
         cityReached = false;
         do {
-            getFout(cur, next, cities[i], p);
-            cur = next;
-            if (touched(cur.pos, i)) {
+            getFout(pos, speed, cities[i], p, path);
+            ++actions;
+            if (touched(pos, cities[i])) {
                 cityReached = true;
                 ++visited;
             }
-        } while (!cityReached && cur.time < cutOff * cutMult);
-        if (cur.time < cutOff * cutMult) {
-            time = next.time;
+        } while (!cityReached && actions < cutOff * cutMult);
+        if (actions < cutOff * cutMult) {
+            time = actions;
         }
         else {
             break;
@@ -231,7 +177,7 @@ void crossover(const Pilot & p1, const Pilot & p2, Pilot & c1, Pilot & c2) {
 void evaluateIndividuals(vector<double> & fitness) {
     countFail = 0;
     for (size_t i = 0; i < populationSize; ++i) {
-       fitness[i] = evaluate(population[i]);
+       fitness[i] = evaluate(population[i], nullptr);
     }
 }
 
@@ -275,7 +221,7 @@ void readInput(const char *file) {
     f.close();
 }
 
-void printResult() {
+void printResult(vector<Action> & actions) {
     ofstream out;
     out.open("result.txt");
     out << actions.size() << endl;
@@ -292,7 +238,7 @@ Pilot & findBestPilot() {
     Pilot * best = nullptr;
     double fit;
     for (auto & p : population) {
-        fit = evaluate(p);
+        fit = evaluate(p, nullptr);
         if (fit > bestfit) {
             bestfit = fit;
             best = &p;
@@ -334,11 +280,11 @@ int main(int argc, char**argv) {
     }
 
     Pilot & p = findBestPilot();
-    cout << evaluate(p) << endl;
-    cout << actions.size() << endl;
+    vector<Action> path;
+    cout << evaluate(p, &path) << endl;
+    cout << path.size() << endl;
     cout << p << endl;
-
-    printResult();
+    printResult(path);
 
     return 0;
 }
