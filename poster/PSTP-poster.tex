@@ -64,7 +64,7 @@
         \begin{itemize}
         \item Explain TSP briefly
         \item Explain how PSTP is different
-        \item Regular TSP methods are not be optimal for PSTP
+        \item Regular TSP methods are not be optimal for PSTP (Sharp turns need extra time for decelerating.)
         \end{itemize}
       \end{block}
 
@@ -92,7 +92,17 @@
         \end{columns}
         \vskip1ex
 
-        Explain rules for GECCO competition. Talk about best solution's, what they used, genetic algorithms etc.
+        Salesman has a mass of 1 kg. At any time step, 1N force can be applied to
+        salesman in either X or Y axis. Newton's equation for velocity and displacement are used for the simulation.
+        Integration time step is sqrt(0.1). Each city has a radius of 5m.
+
+        \begin{itemize}
+            \item All best solutions used genetic algorithms.
+            \item No crossover was used, only mutations.
+            \item Most tried to first find a suitable order of cities for visiting. 
+            \item Some optimize the route incrementally.
+        \end{itemize}
+
         
         % \begin{columns}[T]
         %   \begin{column}{.49\linewidth}
@@ -137,6 +147,9 @@
         \noindent{\textbf{Generating optimal trajectory}}
         
         We have good route. Need to generate trajectory with force vectors. Explain PID-controller and genetic algorithm.
+
+        Several approaches were tried. The first was to use a \alert{proportional-integral-derivative} (PID) controller.
+        The reasoning was, that this.
 
       \end{block}
 
