@@ -24,7 +24,7 @@
 %\usepackage{rotating} %sideways environment
 \usepackage[english]{babel}
 \usepackage[latin1]{inputenc}
-\usepackage[orientation=landscape,size=a1,scale=1.2]{beamerposter}
+\usepackage[orientation=landscape,size=a1,scale=1.15]{beamerposter}
 \listfiles
 \graphicspath{{figures/}}
 % Display a grid to help align images
@@ -55,55 +55,57 @@
 \begin{document}
 \begin{frame}{} 
   \begin{columns}[t]
-    \begin{column}{.3\linewidth}
+    \begin{column}{.305\linewidth}
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
       \begin{block}{Introduction}
-        The \alert{physical travelling salesman problem} (PSTP) is an abstraction of the well-known travelling salesman optimization problem.
+        The \alert{physical travelling salesman problem} (PSTP) is an abstraction into the physical world of the well-known travelling salesman optimization problem.
+        \vskip1ex
+
         \begin{itemize}
-        \item Explain TSP briefly
-        \item Explain how PSTP is different
-        \item Regular TSP methods are not be optimal for PSTP (Sharp turns need extra time for decelerating.)
+        \item In regular TSP, the objective is to find a \alert{Hamiltonian path} in a weighted graph with minimum total cost.
+        \item In PSTP, the goal is to \alert{minimize the time} that it takes to follow the trajectory of the Hamiltonian path, taking into account \alert{physical laws of motion}.
+        \item Solutions for TSP are in general \alert{not optimal} for PSTP, since force needs to be applied to change direction of motion and sharp turns are costly.
         \end{itemize}
       \end{block}
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       
       \begin{block}{GECCO 2005 PTSP Competition}
-        Explain rules for GECCO competition. 
+        We followed the problem statement from GECCO'05 conference PTSP competition. 
         \begin{columns}[T]
-          \begin{column}{.55\linewidth} 
+          \begin{column}{.53\linewidth} 
             \begin{figure}
               \centering
-              \includegraphics[width=\linewidth]{byrod_solution.png}          
-              \caption{GECCO competition winner Martin Byr\"{o}d's solution}
+              \includegraphics[width=\linewidth]{byrod_solution1.png}          
+              \caption{GECCO'05 competition winner Martin Byr\"{o}d's solution}
             \end{figure}
           \end{column}
 
-          \begin{column}{.38\linewidth} 
+          \begin{column}{.39\linewidth} 
             \begin{figure}
               \centering
               \includegraphics[width=\linewidth]{directions.png}          
-              \caption{Force vectors}
+              \caption{One of 5 force vectors are applied at every time step}
             \end{figure}
           \end{column}
           
         \end{columns}
         \vskip1ex
 
-        Salesman has a mass of 1 kg. At any time step, 1N force can be applied to
-        salesman in either X or Y axis. Newton's equation for velocity and displacement are used for the simulation.
-        Integration time step is sqrt(0.1). Each city has a radius of 5m.
+        Salesman has a mass of 1 kg. At every time step ($dt = \sqrt{0,1}$), force of 1N can be applied to
+        salesman in either X or Y axis. Newton's equations for velocity and displacement are used for the simulation.
+        Cities are placed in 320x240 grid and each has a radius of 5m.
 
         \begin{itemize}
             \item All best solutions used genetic algorithms.
             \item No crossover was used, only mutations.
-            \item Most tried to first find a suitable order of cities for visiting. 
-            \item Some optimize the route incrementally.
+            \item Most tried to first find a suitable route for visiting the cities and then optimize the corresponding trajectory. 
+            %\item Some optimize the route incrementally.
         \end{itemize}
 
-        
+        \vskip-1.2ex
         % \begin{columns}[T]
         %   \begin{column}{.49\linewidth}
         %     \begin{itemize}
@@ -132,10 +134,9 @@
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     \end{column}
-    \begin{column}{.3\linewidth}
+    \begin{column}{.305\linewidth}
       \begin{block}{Our Approach}
-        We use a LOT of genetic algorithms.
-
+        Similarly to GECCO'05 competition, we divide the problem into \alert{two phases}. In the first phase, we find an optimal \alert{route for visiting} all the cities. In the second phase, we optimize the \alert{corresponding trajectory} \ie the sequence of applied force vectors. We also use an evolutionary approach in both phases.
         \vskip1ex
         \noindent{\textbf{Finding optimal route}}
         
@@ -194,7 +195,7 @@
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
-    \begin{column}{.3\linewidth}
+    \begin{column}{.305\linewidth}
 
       \begin{block}{Results of Our Algorithm}
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
