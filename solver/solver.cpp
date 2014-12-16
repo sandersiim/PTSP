@@ -26,7 +26,6 @@ struct Trajectory {
     Vector pos;
     Vector speed;
     int cityIndex;
-    int steps;
 };
 
 
@@ -36,13 +35,13 @@ vector<Action> globalActs;
 
 int windowStart;
 int windowEnd;
-const size_t populationSize = 40;
-const size_t numberOfParents = 5;
+const size_t populationSize = 10;
+const size_t numberOfParents = 4;
 
-const int timeWindow = 100;
-const int totalSteps = 500;
-const int timeIncresement = 10;
-const int generations = 4000;
+const int timeWindow = 50;
+const int totalSteps = 1000;
+const int timeIncresement = 15;
+const int generations = 1000;
 
 vector<Vector> cities;
 vector<Trajectory> population;
@@ -52,20 +51,25 @@ normal_distribution<double> normalDist(0,1);
 uniform_int_distribution<> geneDist(0,4);
 uniform_int_distribution<> disMating(0, numberOfParents - 1);
 uniform_int_distribution<> disPopulation(0, populationSize - 1);
-binomial_distribution<> swapDist(40, 0.35);
-bernoulli_distribution flipDist(0.05);
+binomial_distribution<> swapDist(80, 0.5);
+bernoulli_distribution flipDist(0.07);
+uniform_int_distribution<> swapChooseDist(0, timeWindow-2);
+uniform_int_distribution<> flipChooseDist(0, timeWindow-1);
 
 void mutateSwap(Trajectory & t) {
-    uniform_int_distribution<> d(windowStart, windowEnd);
-    auto index = d(ranEng);
+    auto index = swapChooseDist(ranEng) + windowStart;
+    if (index > windowEnd - 2)
+        return;
     auto tmp = t.acts[index+1];
     t.acts[index+1] = t.acts[index];
     t.acts[index] = tmp;
 }
 
 void mutateFlip(Trajectory & t) {
-    uniform_int_distribution<> d(windowStart, windowEnd);
-    t.acts[d(ranEng)] = static_cast<Action>(geneDist(ranEng));
+    auto index = flipChooseDist(ranEng) + windowStart;
+    if (index > windowEnd - 1)
+        return;
+    t.acts[index] = static_cast<Action>(geneDist(ranEng));
 }
 
 void initPopulation() {
@@ -75,7 +79,6 @@ void initPopulation() {
     t.pos = Vector(160,120);
     t.speed = 0;
     t.cityIndex = 0;
-    t.steps = 0;
 #if 0
     ifstream f;
     f.open("best_pid.txt");
@@ -107,19 +110,22 @@ void initPopulation() {
     }
 }
 
-inline void simulate(vector<Action> & acts, Vector & pos, Vector & speed,
-              int & cityIndex, int & steps)
+inline int simulate(vector<Action> & acts, Vector & pos, Vector & speed,
+              int & cityIndex)
 {
-    for (int i = steps; i < windowEnd; ++i) {
+    if (cityIndex == cities.size())
+        return windowStart;
+    for (int i = windowStart; i < windowEnd; ++i) {
         applyAction(pos, speed, acts[i]);
         if (touched(pos, cities[cityIndex])) {
             ++cityIndex;
             if (cityIndex == cities.size()) {
+                return i;
                 break;
             }
         }
-        ++steps;
     }
+    return windowEnd;
 }
 
 Trajectory & findBestSoltion();
@@ -127,13 +133,13 @@ Trajectory & findBestSoltion();
 void moveTime(vector<Trajectory> & pop) {
     int timeend = windowEnd;
     windowEnd = windowStart + timeIncresement;
+    if (windowEnd > totalSteps)
+        windowEnd = totalSteps;
     for (auto & p : pop) {
-        simulate(p.acts, p.pos, p.speed, p.cityIndex, p.steps);
-        p.size = p.steps;
+        p.size = simulate(p.acts, p.pos, p.speed, p.cityIndex);
 
         double e = 0;
-
-        if (p.cityIndex != cities.size()) {
+        if (p.cityIndex < cities.size()) {
             e = 1.0 / sqrt(distSqr(p.pos, cities[p.cityIndex]));
         }
         double fitness = (p.cityIndex/1.0) + e + ( 1.0 / p.size);
@@ -143,27 +149,14 @@ void moveTime(vector<Trajectory> & pop) {
     windowEnd = timeend;
 
     Trajectory & best = findBestSoltion();
+    population[0] = best;
     copy_n(best.acts.begin() + windowStart, timeIncresement,
            back_inserter(globalActs));
-#if 0
-    cout << "Local: ";
-    copy_n(globalActs.begin(), windowStart,
-           ostream_iterator<Action>(cout, " "));
-    copy_n(best.acts.begin() + windowStart, timeWindow,
-           ostream_iterator<Action>(cout, " "));
-    cout << endl;
-    cout << "Global: ";
-    copy(globalActs.begin(), globalActs.end(),
-           ostream_iterator<Action>(cout, " "));
-    cout << endl;
-#endif
+
     for (auto & p : pop) {
-        //simulate(p.acts, p.pos, p.speed, p.cityIndex, p.steps);
-        //p.size = p.steps;
         p.pos = best.pos;
         p.speed = best.speed;
         p.cityIndex = best.cityIndex;
-        p.steps = best.steps;
         p.size = best.size;
     }
 }
@@ -173,15 +166,12 @@ void fitness(Trajectory & t) {
     Vector speed = t.speed;
 
     int cityIndex = t.cityIndex;
-    int steps = t.steps;
 
-    simulate(t.acts, pos, speed, cityIndex, steps);
-
-    t.size = steps;
+    t.size = simulate(t.acts, pos, speed, cityIndex);
 
     double e = 0;
 
-    if (cityIndex != cities.size()) {
+    if (cityIndex < cities.size()) {
         e = 1.0 / sqrt(distSqr(pos, cities[cityIndex]));
     }
     double fitness = (cityIndex/1.0) + e + ( 1.0 / t.size);
@@ -313,7 +303,7 @@ int main(int argc, char**argv) {
 
         for (size_t i = 0; i < generations; ++i) {
             evaluateAll();
-            printStat = !(i % 0xff);
+            printStat = !(i % 0xfff);
             if (printStat) {
                 calcStatistics(population, avg, max);
                 cout << "Pop: avg: " << avg << "\tmax: " << max << "\t";
@@ -330,11 +320,19 @@ int main(int argc, char**argv) {
     evaluateAll();
 
     Trajectory & p = findBestSoltion();
-    copy_n(p.acts.begin() + windowStart, timeWindow,
+    copy_n(p.acts.begin() + windowStart, windowEnd - windowStart,
            back_inserter(globalActs));
 
-    cout << p.fitness << endl;
-    globalActs.resize(p.size);
+    Trajectory fin;
+    fin.pos = Vector(160,120);
+    fin.speed = 0;
+    fin.cityIndex = 0;
+    fin.acts = globalActs;
+    windowStart = 0;
+    windowEnd = totalSteps;
+    fitness(fin);
+    cout << fin.fitness << endl;
+    globalActs.resize(fin.size + 4);
     cout << globalActs.size() << endl;
     printResult(globalActs);
 
