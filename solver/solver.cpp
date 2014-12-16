@@ -8,202 +8,228 @@
 #include <functional>
 #include <algorithm>
 #include <queue>
+#include <cassert>
+#include <iterator>
 #include "vector.h"
 #include "util.h"
 
 using namespace std;
 
 mt19937 ranEng;
-uniform_real_distribution<> distP(-8, 80);
-uniform_real_distribution<> distI(-2, 2);
-uniform_real_distribution<> distD(-5, 50);
-uniform_real_distribution<> distPre(-2, 4);
 
-const size_t populationSize = 20000;
-const size_t numberOfParents = 1400;
-const size_t numberOfNew = 8000;
-const size_t cutOff = 78;
+// Globals here
 
-int optMax = 3;
-int optMin = 0;
-
-vector<Vector> cities;
-
-struct Chromosome {
-    double P;
-    double I;
-    double D;
-    double predict;
+struct Trajectory {
+    double fitness;
+    int size;
+    vector<Action> acts;
+    Vector pos;
+    Vector speed;
+    int cityIndex;
+    int steps;
 };
 
-std::ostream& operator<<(std::ostream& os, const Chromosome& c)
-{
-    // write obj to stream
-    os << "{" << c.P << ", " << c.I << ", " << c.D << ", " << c.predict << "}";
-    return os;
-}
 
-Vector integral;
-Vector prevError;
+double globalMax;
 
-void getFout(Vector & pos, Vector & speed, const Vector & target,
-             const Chromosome & chromo, vector<Action> *actions)
-{
-    Vector predictedPos = pos + (speed * chromo.predict);
+vector<Action> globalActs;
 
-    Vector posError = target - predictedPos;
-    Vector derivate = (posError - prevError) / dt;
-    integral += posError * dt;
+int windowStart;
+int windowEnd;
+const size_t populationSize = 40;
+const size_t numberOfParents = 5;
 
-    Vector output = chromo.P * posError + chromo.I * integral + chromo.D * derivate;
+const int timeWindow = 100;
+const int totalSteps = 500;
+const int timeIncresement = 10;
+const int generations = 4000;
 
-    prevError = posError;
+vector<Vector> cities;
+vector<Trajectory> population;
 
-    double ax = abs(output.y) / abs(output.x);
-    double ay = abs(output.x) / abs(output.y);
-
-    Action act = NOP;
-    if (ax > 0.9) {
-        act = output.y > 0 ? DOWN : UP;
-    }
-    if (ay > 0.9) {
-        act = output.x > 0 ? RIGHT : LEFT;
-    }
-    applyAction(pos, speed, act);
-    if (actions != nullptr) {
-        actions->push_back(act);
-    }
-}
-
-using Pilot = Chromosome;
-
-Pilot bestPilot;
-vector<Pilot> population;
+// distributions used
 normal_distribution<double> normalDist(0,1);
-uniform_int_distribution<> geneDist(0,3);
+uniform_int_distribution<> geneDist(0,4);
+uniform_int_distribution<> disMating(0, numberOfParents - 1);
+uniform_int_distribution<> disPopulation(0, populationSize - 1);
+binomial_distribution<> swapDist(40, 0.35);
+bernoulli_distribution flipDist(0.05);
 
-void mutateChromo(Chromosome & c) {
-    int gene = geneDist(ranEng);
-    double value = normalDist(ranEng);
-
-    switch (gene) {
-        case 0:
-            c.P += value;
-            break;
-        case 1:
-            c.I += value;
-            break;
-        case 2:
-            c.D += value;
-            break;
-        case 3:
-            c.predict += value;
-            break;
-    }
+void mutateSwap(Trajectory & t) {
+    uniform_int_distribution<> d(windowStart, windowEnd);
+    auto index = d(ranEng);
+    auto tmp = t.acts[index+1];
+    t.acts[index+1] = t.acts[index];
+    t.acts[index] = tmp;
 }
 
-void initChromo(Chromosome & c) {
-    c.P = distP(ranEng);
-    c.I = distI(ranEng);
-    c.D = distD(ranEng);
-    c.predict = distPre(ranEng);
+void mutateFlip(Trajectory & t) {
+    uniform_int_distribution<> d(windowStart, windowEnd);
+    t.acts[d(ranEng)] = static_cast<Action>(geneDist(ranEng));
 }
 
 void initPopulation() {
     random_device d;
     ranEng.seed(d());
+    Trajectory t;
+    t.pos = Vector(160,120);
+    t.speed = 0;
+    t.cityIndex = 0;
+    t.steps = 0;
+#if 0
+    ifstream f;
+    f.open("best_pid.txt");
+    int n;
+    f >> n;
+    int a;
+    for (size_t i = 0; i < n; ++i) {
+        f >> a;
+        t.acts.emplace_back(static_cast<Action>(a));
+    }
+    f.close();
+#endif
+
+    t.size = t.acts.size();
+
+    t.size = totalSteps;
+
     population.resize(populationSize);
     for (auto & p : population) {
-        initChromo(p);
-    }
-}
-
-int countFail=0;
-
-double evaluate(const Pilot & p, vector<Action> *path) {
-    Vector pos(160, 120);
-    Vector speed;
-
-    double time;
-    int cutMult = 0;
-
-    int visited = 0;
-    bool cityReached;
-
-    int actions = 0;
-    for (size_t i = 0; i < cities.size(); ++i) {
-        integral = 0;
-        prevError = 0;
-        ++cutMult;
-        cityReached = false;
-        do {
-            getFout(pos, speed, cities[i], p, path);
-            ++actions;
-            if (touched(pos, cities[i])) {
-                cityReached = true;
-                ++visited;
-            }
-        } while (!cityReached && actions < cutOff * cutMult);
-        if (actions < cutOff * cutMult) {
-            time = actions;
+        p = t;
+        p.acts.resize(p.size);
+        for (auto & a : p.acts) {
+            a = static_cast<Action>(geneDist(ranEng));
         }
-        else {
-            break;
-        }
-    }
-    if (visited < cities.size()) {
-        countFail++;
-        double t = (1.0 / (time + cutOff)) + visited / 1000.0;
-        //cout << "fail: " << t << endl;
-        return t;
-    }
-    return (1.0 / (time + cutOff)) + visited / 1000.0;
-}
-
-struct FitPilot {
-    FitPilot () { }
-    FitPilot (Pilot & p, double f) : fitness(f), pilot(&p) { }
-    double fitness;
-    Pilot * pilot;
-    bool operator< (const FitPilot & r) const {
-        return fitness < r.fitness;
-    }
-};
-
-uniform_int_distribution<> crossOverDist(0, 3);
-void crossover(const Pilot & p1, const Pilot & p2, Pilot & c1, Pilot & c2) {
-}
-
-void evaluateIndividuals(vector<double> & fitness) {
-    countFail = 0;
-    for (size_t i = 0; i < populationSize; ++i) {
-       fitness[i] = evaluate(population[i], nullptr);
+        /*
+        for (int i = 0; i < 5; ++i)
+            mutateFlip(p);
+            */
     }
 }
 
-void naturalSelection(vector<double> & fitness, vector<Pilot> & parents,
-                      vector<FitPilot> & parentFitness)
+inline void simulate(vector<Action> & acts, Vector & pos, Vector & speed,
+              int & cityIndex, int & steps)
 {
-    discrete_distribution<int> selection(fitness.begin(), fitness.end());
-    for (size_t i = 0; i < numberOfParents; ++i) {
-        int s = selection(ranEng);
-        parents[i] = population[s];
-        parentFitness[i] = FitPilot(parents[i], fitness[i]);
+    for (int i = steps; i < windowEnd; ++i) {
+        applyAction(pos, speed, acts[i]);
+        if (touched(pos, cities[cityIndex])) {
+            ++cityIndex;
+            if (cityIndex == cities.size()) {
+                break;
+            }
+        }
+        ++steps;
     }
 }
 
-uniform_int_distribution<> disParents(0, numberOfParents - 1);
-uniform_int_distribution<> disPart(optMin, optMax);
-void reproduce(vector<FitPilot> & parents) {
-    for (int i = 0; i < populationSize; i += 2) {
-        if (i < numberOfNew) {
-            auto & p = *parents[disParents(ranEng)].pilot;
-            mutateChromo(p);
-            population[i] = p;
+Trajectory & findBestSoltion();
+
+void moveTime(vector<Trajectory> & pop) {
+    int timeend = windowEnd;
+    windowEnd = windowStart + timeIncresement;
+    for (auto & p : pop) {
+        simulate(p.acts, p.pos, p.speed, p.cityIndex, p.steps);
+        p.size = p.steps;
+
+        double e = 0;
+
+        if (p.cityIndex != cities.size()) {
+            e = 1.0 / sqrt(distSqr(p.pos, cities[p.cityIndex]));
         }
-        else {
-            population[i] = *parents[disParents(ranEng)].pilot;
+        double fitness = (p.cityIndex/1.0) + e + ( 1.0 / p.size);
+        assert(fitness > 0 && fitness < p.cityIndex + 1);
+        p.fitness = fitness;
+    }
+    windowEnd = timeend;
+
+    Trajectory & best = findBestSoltion();
+    copy_n(best.acts.begin() + windowStart, timeIncresement,
+           back_inserter(globalActs));
+#if 0
+    cout << "Local: ";
+    copy_n(globalActs.begin(), windowStart,
+           ostream_iterator<Action>(cout, " "));
+    copy_n(best.acts.begin() + windowStart, timeWindow,
+           ostream_iterator<Action>(cout, " "));
+    cout << endl;
+    cout << "Global: ";
+    copy(globalActs.begin(), globalActs.end(),
+           ostream_iterator<Action>(cout, " "));
+    cout << endl;
+#endif
+    for (auto & p : pop) {
+        //simulate(p.acts, p.pos, p.speed, p.cityIndex, p.steps);
+        //p.size = p.steps;
+        p.pos = best.pos;
+        p.speed = best.speed;
+        p.cityIndex = best.cityIndex;
+        p.steps = best.steps;
+        p.size = best.size;
+    }
+}
+
+void fitness(Trajectory & t) {
+    Vector pos = t.pos;
+    Vector speed = t.speed;
+
+    int cityIndex = t.cityIndex;
+    int steps = t.steps;
+
+    simulate(t.acts, pos, speed, cityIndex, steps);
+
+    t.size = steps;
+
+    double e = 0;
+
+    if (cityIndex != cities.size()) {
+        e = 1.0 / sqrt(distSqr(pos, cities[cityIndex]));
+    }
+    double fitness = (cityIndex/1.0) + e + ( 1.0 / t.size);
+    assert(fitness > 0 && fitness < cityIndex + 1);
+    t.fitness = fitness;
+}
+
+void evaluateAll() {
+    for (auto & p : population) {
+        fitness(p);
+        if (p.fitness > globalMax) {
+            globalMax = p.fitness;
+            population[0] = p;
         }
+    }
+}
+
+Trajectory & tournamentSelect() {
+    Trajectory & t1 = population[disPopulation(ranEng)];
+    Trajectory & t2 = population[disPopulation(ranEng)];
+    Trajectory & t3 = population[disPopulation(ranEng)];
+    double f1 = t1.fitness;
+    double f2 = t2.fitness;
+    double f3 = t3.fitness;
+    if (f1 > f2) {
+        return f1 > f3 ? t1 : t3;
+    }
+    else {
+        return f2 > f3 ? t2 : t3;
+    }
+}
+
+void naturalSelection(vector<Trajectory> & parents)
+{
+    for (int i = 0; i < numberOfParents; ++i) {
+        parents[i] = tournamentSelect();
+    }
+}
+
+void reproduce(vector<Trajectory> & matingPool) {
+    for (int i = 1; i < populationSize; ++i) {
+        population[i] = matingPool[disMating(ranEng)];
+        int swaps = swapDist(ranEng);
+        while (swaps--) {
+            mutateSwap(population[i]);
+        }
+        if (flipDist(ranEng))
+            mutateFlip(population[i]);
     }
 }
 
@@ -233,18 +259,37 @@ void printResult(vector<Action> & actions) {
     out.close();
 }
 
-Pilot & findBestPilot() {
+Trajectory & findBestSoltion() {
     double bestfit = 0;
-    Pilot * best = nullptr;
+    Trajectory * best = nullptr;
     double fit;
     for (auto & p : population) {
-        fit = evaluate(p, nullptr);
-        if (fit > bestfit) {
-            bestfit = fit;
+        if (p.fitness > bestfit) {
+            bestfit = p.fitness;
             best = &p;
         }
     }
     return *best;
+}
+
+inline void calcStatistics(const vector<Trajectory> & pop, double & avg,
+                           double & max)
+{
+    max = 0;
+    double sum = 0;
+    for (const auto & p : pop) {
+        sum += p.fitness;
+        if (p.fitness > max) {
+            max = p.fitness;
+#if 0
+            if (max > globalMax) {
+                globalBest = p;
+                globalMax = max;
+            }
+#endif
+        }
+    }
+    avg = sum / pop.size();
 }
 
 int main(int argc, char**argv) {
@@ -252,39 +297,46 @@ int main(int argc, char**argv) {
     readInput(argv[1]);
 
     initPopulation();
-    vector<double> fitness;
-    vector<Pilot> parents;
-    vector<FitPilot> parentFitness;
-    fitness.resize(populationSize);
+    vector<Trajectory> parents;
     parents.resize(numberOfParents);
-    parentFitness.resize(numberOfParents);
-    for (size_t i = 0; i < 10; ++i) {
-        evaluateIndividuals(fitness);
-        naturalSelection(fitness, parents, parentFitness);
-        reproduce(parentFitness);
-        auto bf = max_element(fitness.begin(), fitness.end());
-        double bestFitness = *bf;
-        double avgFitness = accumulate(fitness.begin(), fitness.end(), 0.0)
-                / populationSize;
-        cout << bestFitness << "\t" << avgFitness << "\tfailes: "
-            << countFail << endl;
-#if 1
-        optMax = min<int>(cities.size() - 1, bestFitness + 1);
-        optMin = max<int>(avgFitness - 2, 0);
-#else
-        optMax = cities.size() - 1;
-        optMin = 0;
-#endif
-        crossOverDist = uniform_int_distribution<> (optMin, optMax);
-        disPart = uniform_int_distribution<> (optMin, optMax);
+    double avg, max;
+    bool printStat = false;
+    for (size_t t = 0; t + timeIncresement < totalSteps; t += timeIncresement) {
+        if (t != 0) {
+            cout << "Increase timewindow!" << endl;
+            moveTime(population);
+        }
+        windowStart = t;
+        windowEnd = t + timeWindow;
+        if (windowEnd > totalSteps)
+            windowEnd = totalSteps;
+
+        for (size_t i = 0; i < generations; ++i) {
+            evaluateAll();
+            printStat = !(i % 0xff);
+            if (printStat) {
+                calcStatistics(population, avg, max);
+                cout << "Pop: avg: " << avg << "\tmax: " << max << "\t";
+            }
+            naturalSelection(parents);
+            if (printStat) {
+                calcStatistics(parents, avg, max);
+                cout << "Par: avg: " << avg << "\tmax: " << max << endl;
+            }
+            reproduce(parents);
+        }
     }
 
-    Pilot & p = findBestPilot();
-    vector<Action> path;
-    cout << evaluate(p, &path) << endl;
-    cout << path.size() << endl;
-    cout << p << endl;
-    printResult(path);
+    evaluateAll();
+
+    Trajectory & p = findBestSoltion();
+    copy_n(p.acts.begin() + windowStart, timeWindow,
+           back_inserter(globalActs));
+
+    cout << p.fitness << endl;
+    globalActs.resize(p.size);
+    cout << globalActs.size() << endl;
+    printResult(globalActs);
 
     return 0;
 }
