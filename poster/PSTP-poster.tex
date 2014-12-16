@@ -150,7 +150,18 @@
         We have good route. Need to generate trajectory with force vectors. Explain PID-controller and genetic algorithm.
 
         Several approaches were tried. The first was to use a \alert{proportional-integral-derivative} (PID) controller.
-        The reasoning was, that this.
+        The reasoning was, that this would narrow the search space. For every segment on the route, parameters for PID
+        controller were evolved using a genetic algorithm. This had the disadvantage that salesman was slow when close to approaching a
+        city.
+
+        Later a genetic algorithm was used directly on the sequence of force vectors. The fitness function $f$ is not very
+        sophisticated: for trajectory $t$ fitness is given by $f(t) = N + (1 / d) + (1 / T)$, where $N$ is the number of
+        cities visited, $d$ is the euclidean distance to the next city to be visited and $T$ is the time taken.
+        Two types of mutations were used. One was to swap two adjacent force vectors. And the other was to randomly
+        overwrite a vector in the sequence.
+        Tournament selection with size 3 was used for selecting trajectories for parenting the next generation.
+
+        Sliding time window was used to find solutions in reasonable time.
 
       \end{block}
 
