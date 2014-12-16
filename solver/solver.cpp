@@ -19,9 +19,6 @@ mt19937 ranEng;
 
 // Globals here
 
-const size_t populationSize = 50;
-const size_t numberOfParents = 5;
-
 struct Trajectory {
     double fitness;
     int size;
@@ -34,15 +31,18 @@ struct Trajectory {
 
 
 double globalMax;
-Trajectory globalBest;
 
 vector<Action> globalActs;
 
 int windowStart;
 int windowEnd;
+const size_t populationSize = 40;
+const size_t numberOfParents = 5;
+
 const int timeWindow = 100;
-const int totalSteps = 1000;
+const int totalSteps = 500;
 const int timeIncresement = 10;
+const int generations = 4000;
 
 vector<Vector> cities;
 vector<Trajectory> population;
@@ -52,7 +52,7 @@ normal_distribution<double> normalDist(0,1);
 uniform_int_distribution<> geneDist(0,4);
 uniform_int_distribution<> disMating(0, numberOfParents - 1);
 uniform_int_distribution<> disPopulation(0, populationSize - 1);
-binomial_distribution<> swapDist(40, 0.3);
+binomial_distribution<> swapDist(40, 0.35);
 bernoulli_distribution flipDist(0.05);
 
 void mutateSwap(Trajectory & t) {
@@ -192,6 +192,10 @@ void fitness(Trajectory & t) {
 void evaluateAll() {
     for (auto & p : population) {
         fitness(p);
+        if (p.fitness > globalMax) {
+            globalMax = p.fitness;
+            population[0] = p;
+        }
     }
 }
 
@@ -218,7 +222,7 @@ void naturalSelection(vector<Trajectory> & parents)
 }
 
 void reproduce(vector<Trajectory> & matingPool) {
-    for (int i = 0; i < populationSize; ++i) {
+    for (int i = 1; i < populationSize; ++i) {
         population[i] = matingPool[disMating(ranEng)];
         int swaps = swapDist(ranEng);
         while (swaps--) {
@@ -297,15 +301,17 @@ int main(int argc, char**argv) {
     parents.resize(numberOfParents);
     double avg, max;
     bool printStat = false;
-    for (size_t t = 0; t + timeWindow < totalSteps; t += timeIncresement) {
+    for (size_t t = 0; t + timeIncresement < totalSteps; t += timeIncresement) {
         if (t != 0) {
             cout << "Increase timewindow!" << endl;
             moveTime(population);
         }
         windowStart = t;
         windowEnd = t + timeWindow;
+        if (windowEnd > totalSteps)
+            windowEnd = totalSteps;
 
-        for (size_t i = 0; i < 20000; ++i) {
+        for (size_t i = 0; i < generations; ++i) {
             evaluateAll();
             printStat = !(i % 0xff);
             if (printStat) {
