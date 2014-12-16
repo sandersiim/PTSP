@@ -24,7 +24,7 @@
 %\usepackage{rotating} %sideways environment
 \usepackage[english]{babel}
 \usepackage[latin1]{inputenc}
-\usepackage[orientation=landscape,size=a1,scale=1.15]{beamerposter}
+\usepackage[orientation=landscape,size=a1,scale=1.1]{beamerposter}
 \listfiles
 \graphicspath{{figures/}}
 % Display a grid to help align images
@@ -73,13 +73,13 @@
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       
       \begin{block}{GECCO 2005 PTSP Competition}
-        We followed the problem statement from GECCO'05 conference PTSP competition. 
+        We followed the \alert{problem statement} from GECCO'05 conference PTSP competition. 
         \begin{columns}[T]
           \begin{column}{.53\linewidth} 
             \begin{figure}
               \centering
               \includegraphics[width=\linewidth]{byrod_solution1.png}          
-              \caption{GECCO'05 competition winner Martin Byr\"{o}d's solution}
+              \caption{\centering GECCO'05 competition winner Martin Byr\"{o}d's solution}
             \end{figure}
           \end{column}
 
@@ -87,7 +87,7 @@
             \begin{figure}
               \centering
               \includegraphics[width=\linewidth]{directions.png}          
-              \caption{One of 5 force vectors are applied at every time step}
+              \caption{\centering One of 5 force vectors are applied at every time step}
             \end{figure}
           \end{column}
           
@@ -97,6 +97,8 @@
         Salesman has a mass of 1 kg. At every time step ($dt = \sqrt{0,1}$), force of 1N can be applied to
         salesman in either X or Y axis. Newton's equations for velocity and displacement are used for the simulation.
         Cities are placed in 320x240 grid and each has a radius of 5m.
+        \vskip1ex
+        \textbf{Some observations about GECCO'05 solutions:}
 
         \begin{itemize}
             \item All best solutions used genetic algorithms.
@@ -140,28 +142,38 @@
         \vskip1ex
         \noindent{\textbf{Finding optimal route}}
         
-        TSP solutions do not give good results. Need a different heuristic. Explaing heuristic and genetic algorithm.
+        For finding a good route candidate, a heuristic needs to be used for estimating approximate time of traversing a given route. Looking at the solutions of GECCO'05 competition, it was immediately clear that an optimal route minimizes the \alert{total turning angle} and smooth curves are favorable.
 
+        \[f_1(r) = 1 / \tau\]
         Need nice picture with circle's to illustrate trajectory estimation.
 
         \vskip1ex
         \noindent{\textbf{Generating optimal trajectory}}
         
-        We have good route. Need to generate trajectory with force vectors. Explain PID-controller and genetic algorithm.
+        %We have good route. Need to generate trajectory with force vectors. Explain PID-controller and genetic algorithm.
 
-        Several approaches were tried. The first was to use a \alert{proportional-integral-derivative} (PID) controller.
-        The reasoning was, that this would narrow the search space. For every segment on the route, parameters for PID
-        controller were evolved using a genetic algorithm. This had the disadvantage that salesman was slow when close to approaching a
+        Our first approach for optimizing the trajectory was to use a \alert{proportional-integral-derivative} (PID) controller.
+        The reasoning was, that this would significantly narrow the search space. For every segment on the route, parameters for PID
+        controller were evolved using a genetic algorithm. This had the disadvantage that salesman was decelerating when approaching a
         city.
 
-        Later a genetic algorithm was used directly on the sequence of force vectors. The fitness function $f$ is not very
-        sophisticated: for trajectory $t$ fitness is given by $f(t) = N + (1 / d) + (1 / T)$, where $N$ is the number of
-        cities visited, $d$ is the euclidean distance to the next city to be visited and $T$ is the time taken.
-        Two types of mutations were used. One was to swap two adjacent force vectors. And the other was to randomly
-        overwrite a vector in the sequence.
-        Tournament selection with size 3 was used for selecting trajectories for parenting the next generation.
+        \vskip1ex
 
-        Sliding time window was used to find solutions in reasonable time.
+        Later, we used a genetic algorithm directly on the sequence of force vectors. The \alert{fitness function} $f_2$ is simple: for trajectory $t$, fitness is given by \[f_2(t) = N + (1 / d) + (1 / T) ,\]
+        where $N$ is the number of cities visited, $d$ is the euclidean distance to the next city and $T$ is total elapsed time.
+
+        \vskip1ex
+
+        Two types of \alert{mutations} were used:
+
+        \begin{itemize}
+          \item Swap two adjacent force vectors
+          \item Randomly overwrite a vector in the sequence
+        \end{itemize}
+
+        \vskip1ex
+
+        \alert{Tournament selection} with size 3 was used for selecting trajectories for parenting the next generation. Sliding time window was used to find solutions in reasonable time.
 
       \end{block}
 
@@ -219,8 +231,10 @@
                 
       \begin{block}{Conclusion}
         \begin{itemize}
-        \item Blah blah
-        \item BLah blah
+        \item Our solution is definitely in the right direction, but genetic algorithm parameters for best route need tweaking
+        \item We seeem to have established a fairly objective heuristic for best route, which favors smooth curves over sharp corners in the trajectory
+        \item A genetic algorithm is a good approach to optimizing the trajectory for given route and our implementation does this well
+        \item An even challenging problem is given in ... TODO
         \end{itemize}
         \vspace{-1ex}
       \end{block}

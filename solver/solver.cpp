@@ -43,6 +43,7 @@ const int totalSteps = 1000;
 const int timeIncresement = 15;
 const int generations = 1000;
 
+
 vector<Vector> cities;
 vector<Trajectory> population;
 
