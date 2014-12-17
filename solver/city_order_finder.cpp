@@ -13,7 +13,7 @@
 
 
 #include "vector.h"
-
+#define RANDOM_MUTATE
 using namespace std;
 
 mt19937 ranEng;
@@ -50,7 +50,9 @@ double magnitude(Vector& a) {
 //angle between vectors. always returns value <= M_PI
 //http://math.stackexchange.com/questions/361412/finding-the-angle-between-three-points
 double angle(Vector& a, Vector& b) {
-    return acos(dotProduct(a, b)/(magnitude(a)*magnitude(b)));
+   //s if( b.x == 0 && b.y == 0) return 0;
+    //return acos(dotProduct(a, b)/(magnitude(a)*magnitude(b)));
+    return dotProduct(a, b)/(magnitude(a)*magnitude(b));
 }
 
 // from http://forums.techarena.in/software-development/1415154.htm
@@ -82,17 +84,38 @@ Vector circleCenterPoint(Vector p, Vector q, Vector r) {
 }
 
 bool pointsAreOnLine(Vector& a, Vector& b, Vector& c) {
-    return abs((a.y - b.y) * (a.x - c.x) - (a.y - c.y) * (a.x - b.x)) <= 1e-9;
+    //return abs((a.y - b.y) * (a.x - c.x) - (a.y - c.y) * (a.x - b.x)) <= 5.0d;
+
+    double sum_x = a.x+b.x+c.x;
+    double sum_y = a.y+b.y+c.y;
+    double mean_x = (sum_x) / 3;
+    double mean_y = (sum_y) / 3;
+
+    double varx = (a.x*a.x + b.x*b.x + c.x*c.x) - sum_x * mean_x;
+    double cov = (a.x*a.y + b.x*b.y + c.x*c.y) - sum_x * mean_y;
+
+    // check for zero varx
+    //y = kx + c
+    double k = cov / varx;
+    double d = mean_y - k * mean_x;
+    double dista, distb, distc;
+    dista = abs(k*a.x - a.y + d)/sqrt(k*k + 1);
+    distb = abs(k*b.x - b.y + d)/sqrt(k*k + 1);
+    distc = abs(k*c.x - c.y + d)/sqrt(k*k + 1);
+
+    return dista < 4.5d && distb < 4.5d && distc < 4.5d;
+
 }
 
-string vectorToString(vector<City>& vec) {
+template <typename T>
+string vectorToString(vector<T>& vec) {
     ostringstream oss;
 
     if (!vec.empty())
     {
         // Convert all but the last element to avoid a trailing ","
         copy(vec.begin(), vec.end()-1,
-            ostream_iterator<City>(oss, ","));
+            ostream_iterator<T>(oss, ", "));
 
         // Now add the last element with no delimiter
         oss << vec.back();
@@ -111,8 +134,9 @@ struct Fitness {
         return fitness < r.fitness;
     }
 };
+double penaltyForTurning = 4.0d;
 
-Fitness evaluateCityOrder(CityOrder& order) {
+Fitness evaluateCityOrder2(CityOrder& order) {
     double totalTime = 0;
     Vector currentPos = startPos;
     Vector pos1, pos2, circleCenter;
@@ -133,7 +157,7 @@ Fitness evaluateCityOrder(CityOrder& order) {
         pos2 = cities[order[i+1]];
 
         if (pointsAreOnLine(currentPos, pos1, pos2)) {
-
+            //cout << i << endl;
             if (i == 0) {
                 lastThreeOnLine = true;
                 double dist = distance(currentPos, pos1);
@@ -150,32 +174,46 @@ Fitness evaluateCityOrder(CityOrder& order) {
             }
             if (i == order.size()-2) {
                 if (lastThreeOnLine) {
-                    cout << i << endl;
-                    cout << vectorToString(order) << endl;
-                    assert(false);
+                    double dist = distance(currentPos, pos1) + distance(pos1, pos2);
+                    double v2 = (previousSpeed.x*previousSpeed.x + previousSpeed.y*previousSpeed.y);
+                    double time = -sqrt(v2) + sqrt(v2 + 2*dist);
+                    currentTime += time;
+                    totalTime += currentTime;
+                    timeValues[i] = currentTime/2.0;
+                    timeValues[i+1] = currentTime/2.0; // Hack
+                    return Fitness(timeValues, 1.0d/totalTime);
                 }
                 lastThreeOnLine = true;
 
                 newSpeed = Vector(pos1.x-currentPos.x, pos1.y-currentPos.y);
                 newSpeed = newSpeed*(magnitude(previousSpeed)/magnitude(newSpeed));
                 Vector differenceVector = Vector(newSpeed.x - previousSpeed.x, newSpeed.y - previousSpeed.y);
-                currentTime = magnitude(differenceVector);
+                currentTime = penaltyForTurning*magnitude(differenceVector);
 
                 double dist = distance(currentPos, pos1) + distance(pos1, pos2);
                 double v2 = (newSpeed.x*newSpeed.x + newSpeed.y*newSpeed.y);
                 double time = -sqrt(v2) + sqrt(v2 + 2*dist);
                 currentTime += time;
                 totalTime += currentTime;
-                timeValues[i] = currentTime;
+                timeValues[i] = currentTime/2.0;
+                timeValues[i+1] = currentTime/2.0; // Hack
                 return Fitness(timeValues, 1.0d/totalTime);
             }
             if (i > 0 && i < order.size()-2) {
                 if (lastThreeOnLine) {
-                    cout << i << endl;
-                    cout << order.size() << endl;
-                    cout << vectorToString(order) << endl;
                     newSpeed = Vector(pos1.x-currentPos.x, pos1.y-currentPos.y);
-                    assert(false);
+                    newSpeed = newSpeed*(magnitude(previousSpeed)/magnitude(newSpeed));
+                    Vector differenceVector = Vector(newSpeed.x - previousSpeed.x, newSpeed.y - previousSpeed.y);
+                    currentTime = penaltyForTurning*magnitude(differenceVector);
+
+                    double dist = distance(currentPos, pos1);
+                    double v2 = (newSpeed.x*newSpeed.x + newSpeed.y*newSpeed.y);
+                    double time = -sqrt(v2) + sqrt(v2 + 2*dist);
+                    currentTime += time;
+                    totalTime += currentTime;
+                    timeValues[i] = currentTime;
+                    previousSpeed = newSpeed;
+                    previousSpeed = previousSpeed*(sqrt(v2 + 2*dist)/magnitude(previousSpeed));
 
                 } else {
                     lastThreeOnLine = true;
@@ -202,6 +240,12 @@ Fitness evaluateCityOrder(CityOrder& order) {
         }
         lastThreeOnLine = false;
 
+//        cout << currentPos << "; " << pos1 <<"; " << pos2 << endl;
+
+        if (distance(currentPos, pos1) < 12.0d) {
+
+        }
+
         circleCenter = circleCenterPoint(currentPos, pos1, pos2);
         radius = distance(currentPos, circleCenter);
         lastCircleCenter = circleCenter;
@@ -217,6 +261,12 @@ Fitness evaluateCityOrder(CityOrder& order) {
         vec_c = Vector(pos2.x - circleCenter.x, pos2.y - circleCenter.y);
         vec_up = Vector(0, -radius);
         vec_down = Vector(0, radius);
+
+//        cout << vec_a << endl;
+//        cout << vec_b << endl;
+//        cout << vec_c << endl;
+//        cout << vec_up << endl;
+//        cout << vec_down << endl;
 
         trajectory_angle = angle(vec_a, vec_b);
 
@@ -273,6 +323,9 @@ Fitness evaluateCityOrder(CityOrder& order) {
         //arc_length = trajectory_angle*radius;
         currentTime = trajectory_angle*sqrt(radius);
 //        cout << "Added trajectory time: " << trajectory_angle*sqrt(radius) << endl;
+//        cout << "iter " << i << endl;
+//        cout << "clockWise: " << clockWise << endl;
+//        cout << "pos2IsInBetween: " << pos2IsInBetween << endl;
 
         if (clockWise && currentPos.y >= circleCenter.y) {
             newSpeed = Vector(1.0d, -(vec_a.x/vec_a.y));
@@ -287,7 +340,7 @@ Fitness evaluateCityOrder(CityOrder& order) {
         newSpeed = newSpeed*(sqrt(radius)/magnitude(newSpeed));
 
         Vector differenceVector = Vector(newSpeed.x-previousSpeed.x, newSpeed.y-previousSpeed.y);
-        currentTime += magnitude(differenceVector);
+        currentTime += penaltyForTurning*magnitude(differenceVector);
         totalTime += currentTime;
         timeValues[i] = currentTime;
 //        cout << "Added velocity change time: " << magnitude(differenceVector) << endl;
@@ -360,56 +413,40 @@ Fitness evaluateCityOrder(CityOrder& order) {
 
     return Fitness(timeValues, 1.0d/totalTime);
 }
+double k = 3.4d;
+Fitness evaluateCityOrder(CityOrder& order) {
+    double totalTime = 0;
+    Vector currentPos = startPos;
+    Vector pos1, pos2;
 
-//double alternativeEvaluate(CityOrder& order) {
-//    double totalTime = 0;
-//    Vector currentPos = startPos;
-//    Vector pos1;
+    Vector vec1, vec2;
+    vector<double> timeValues (order.size(), 0);
 
-//    Vector newSpeed;
-//    Vector previousSpeed = Vector(0, 0);
-//    Vector vec_ab;
+    double currentTime, dist1, dist2, rotationAngle;
+    for (size_t i = 0; i < order.size()-1; i++) {
+        pos1 = cities[order[i]];
+        pos2 = cities[order[i+1]];
 
-//    double trajectoryTime, trajectorySpeed, dist;
-//    for (size_t i = 0; i < order.size()-1; i++) {
-//        pos1 = order[i];
+        dist1 = distance(currentPos, pos1);
+        dist2 = distance(pos1, pos2);
 
-//        dist = distance(currentPos, pos1);
+        vec1 = Vector(currentPos.x-pos1.x, currentPos.y-pos1.y);
+        vec2 = Vector(pos2.x-pos1.x, pos2.y-pos1.y);
 
-//        trajectorySpeed = sqrt(2.0d*dist)/2.0d;
+        rotationAngle = angle(vec1, vec2);
 
-//        trajectoryTime = dist/trajectorySpeed;
-//        totalTime += trajectoryTime;
+        currentTime = (sqrt(dist1) + sqrt(dist2))*(k + rotationAngle);
+        //currentTime += 4*dist*(rotationAngle/M_PI);
 
-//        vec_ab = Vector(pos1.x - currentPos.x, pos1.y - currentPos.y);
+        totalTime += currentTime;
 
-//        newSpeed = vec_ab/sqrt(2.0d*dist);
+        timeValues[i] = currentTime;
 
-//        Vector differenceVector = Vector(newSpeed.x-previousSpeed.x, newSpeed.y-previousSpeed.y);
-//        totalTime += magnitude(differenceVector);
-////        cout << "Added velocity change time: " << magnitude(differenceVector) << endl;
+        currentPos = pos1;
+    }
 
-//        previousSpeed = newSpeed;
-
-//        currentPos = pos1;
-//    }
-
-//    pos1 = order.back();
-
-//    newSpeed = Vector(pos1.x - currentPos.x, pos1.y - currentPos.y);
-//    newSpeed = newSpeed*(magnitude(previousSpeed)/magnitude(newSpeed));
-
-//    Vector differenceVector = Vector(newSpeed.x-previousSpeed.x, newSpeed.y-previousSpeed.y);
-//    totalTime += magnitude(differenceVector);
-
-//    dist = distance(currentPos, pos1);
-
-//    double v2 = newSpeed.x*newSpeed.x + newSpeed.y*newSpeed.y;
-
-//    totalTime += -sqrt(v2) + sqrt(v2 + 2*dist);
-
-//    return totalTime;
-//}
+    return Fitness(timeValues, 1.0d/totalTime);
+}
 
 CityOrder nearestNeighbour(CityOrder& startingOrder) {
     set<size_t> visitedCities;
@@ -539,9 +576,15 @@ using Population = vector<Chromosome>;
 
 Population population;
 
-size_t populationSize = 100;
-size_t numberOfParents = 100;
+#ifdef RANDOM_MUTATE
+size_t populationSize = 2000;
+size_t numberOfParents = 1000;
+size_t numberOfChildren = 1000;
+#else
+size_t populationSize = 200;
+size_t numberOfParents = 200;
 size_t numberOfChildren = 600;
+#endif
 
 
 void evaluateIndividuals(vector<double> & fitness) {
@@ -550,17 +593,32 @@ void evaluateIndividuals(vector<double> & fitness) {
     }
 }
 
-//void naturalSelection(vector<double> & fitness, vector<FitCityOrder> & parents)
-//{
-//    discrete_distribution<int> selection(fitness.begin(), fitness.end());
-//    for (size_t i = 0; i < numberOfParents; ++i) {
-//        int s = selection(ranEng);
-//        parents[i] = population[s];
-//    }
-//}
-
+void naturalSelection(vector<double> & fitness, vector<FitCityOrder> & parents)
+{
+    discrete_distribution<int> selection(fitness.begin(), fitness.end());
+    for (size_t i = 0; i < numberOfParents; ++i) {
+        int s = selection(ranEng);
+        parents[i] = population[s];
+    }
+}
 
 uniform_int_distribution<> randomCity;
+
+
+void mutateChromo3(Chromosome& chromo) {
+
+    size_t worstIndex = distance(chromo.fitness.times.begin(),
+                                 max_element(chromo.fitness.times.begin(), chromo.fitness.times.end()));
+    size_t i = randomCity(ranEng);
+    while(worstIndex == i) {
+        i = randomCity(ranEng);
+    }
+
+    size_t movedElement = chromo.order[worstIndex];
+    swap(chromo.order[i], chromo.order[worstIndex]);
+    chromo.fitness = evaluateCityOrder(chromo.order);
+}
+
 
 void mutateChromo(Chromosome& chromo) {
     size_t i = randomCity(ranEng);
@@ -573,14 +631,35 @@ void mutateChromo(Chromosome& chromo) {
     chromo.fitness = evaluateCityOrder(chromo.order);
 }
 
+uniform_int_distribution<> randomCity1;
+
+void mutateChromo2(Chromosome& chromo) {
+//    size_t i = randomCity1(ranEng);
+
+//    swap(chromo.order[i], chromo.order[i+1]);
+//    shuffle(chromo.order.begin(), chromo.order.end(), ranEng);
+
+    mutateChromo(chromo);
+//#ifdef RANDOM_MUTATE
+    mutateChromo(chromo);
+//#endif
+
+    chromo.fitness = evaluateCityOrder(chromo.order);
+
+}
+
 uniform_real_distribution<> randomProbability(0, 1);
-double mutationProbability = 0.1;
+#ifdef RANDOM_MUTATE
+double mutationProbability = 0.01;
+#else
+double mutationProbability = 0.12;
+#endif
 void mutatePopulation() {
     double pr;
     for (auto &c : population) {
         pr = randomProbability(ranEng);
         if (pr < mutationProbability) {
-            mutateChromo(c);
+            mutateChromo2(c);
         }
     }
 
@@ -595,8 +674,13 @@ void reproduce(vector<FitCityOrder> & parents) {
     double fitness1, fitness2;
     for (int i = 0; i < selectionPool.size(); i ++) {
         if (i < numberOfChildren) {
-            Chromosome child = population[i%populationSize];
+            Chromosome child = parents[i%numberOfParents];
+#ifdef RANDOM_MUTATE
+            mutateChromo3(child);
+            mutateChromo3(child);
+#else
             mutateChromo(child);
+#endif
             selectionPool[i] = child;
 
             /*parent1 = distParents(ranEng);
@@ -696,6 +780,10 @@ void initChromo(Chromosome & c) {
 
     //c.order = nearestNeighbour(c.order);
     c.fitness = evaluateCityOrder(c.order);
+    /*while (c.fitness < 0.0014d) {
+        shuffle(c.order.begin(), c.order.end(), ranEng);
+        c.fitness = evaluateCityOrder(c.order);
+    }*/
 }
 
 void initPopulation() {
@@ -707,8 +795,10 @@ void initPopulation() {
     }
     CityOrder order;
     //Seed population with nearestNeighbour result
+#ifndef RANDOM_MUTATE
     population[0].order = nearestNeighbour(order);
     population[0].fitness = evaluateCityOrder(population[0].order);
+#endif
 }
 
 
@@ -727,6 +817,35 @@ void readInput(const char *file) {
 
     f.close();
     randomCity = uniform_int_distribution<> (0, n-1);
+    randomCity1 = uniform_int_distribution<> (0, n-2);
+
+}
+
+CityOrder readOrder(const char *file) {
+    ifstream f;
+    f.open(file);
+    int n;
+    f >> n;
+
+    vector<Vector> orderCities (n);
+
+    for (size_t i = 0; i < n; ++i) {
+        f >> orderCities[i].x >> orderCities[i].y;
+    }
+
+    CityOrder order;
+    for (auto c : orderCities) {
+        for (size_t i = 0; i < cities.size(); i++) {
+            if (c.x == cities[i].x && c.y == cities[i].y) {
+                order.push_back(i);
+                break;
+            }
+        }
+    }
+
+    f.close();
+    return order;
+
 }
 
 void printResult(CityOrder& order) {
@@ -741,47 +860,66 @@ void printResult(CityOrder& order) {
     out.close();
 }
 
-size_t numberOfGenerations = 2000;
+size_t numberOfGenerations = 10000;
 
 int main(int argc, char**argv) {
 
     readInput(argv[1]);
+
+    if (argc > 2) {
+        CityOrder order = readOrder(argv[2]);
+        cout << evaluateCityOrder(order).fitness << endl;
+        cout << 1.0d/evaluateCityOrder(order).fitness << endl;
+        return 0;
+    }
 
     vector<double> fitness;
     vector<FitCityOrder> parents;
     fitness.resize(populationSize);
     parents.resize(numberOfParents);
 
-    initPopulation();
-    evaluateIndividuals(fitness);
-
-    auto bf = max_element(population.begin(), population.end());
-    FitCityOrder bestChromosome = *bf;
-    Fitness bestFitness = bestChromosome.fitness;
-    double avgFitness = accumulate(fitness.begin(), fitness.end(), 0.0)
-            / populationSize;
-    //cout << bestFitness.fitness << "\t" << avgFitness << endl;
-
-    Fitness currentGenerationBestFitness;
-    FitCityOrder currentGenerationBestChromosome;
-    for (size_t i = 0; i < numberOfGenerations; ++i) {
-        //naturalSelection(fitness, parents);
-        reproduce(parents);
-        mutatePopulation();
+    Fitness bestFitness(0);
+    Chromosome bestChromosome;
+    //while( true ) {
+        initPopulation();
         evaluateIndividuals(fitness);
+
         auto bf = max_element(population.begin(), population.end());
-        currentGenerationBestChromosome = *bf;
-        currentGenerationBestFitness = currentGenerationBestChromosome.fitness;
-        double avgFitness = accumulate(fitness.begin(), fitness.end(), 0.0)
-                / populationSize;
-        //cout << currentGenerationBestFitness.fitness << "\t" << avgFitness << endl;
+        FitCityOrder currentGenerationBestChromosome = *bf;
+        Fitness currentGenerationBestFitness = bestChromosome.fitness;
         if (bestFitness < currentGenerationBestFitness) {
             bestFitness = currentGenerationBestFitness;
             bestChromosome = currentGenerationBestChromosome;
+            double avgFitness = accumulate(fitness.begin(), fitness.end(), 0.0)
+                    / populationSize;
+            cout << currentGenerationBestFitness.fitness << "\t" << avgFitness << endl;
+            printResult(bestChromosome.order);
         }
-    }
 
-    cout << "Best fitness result: " << bestFitness.fitness << endl;
+        cout << "New Population" << endl;
+        for (size_t i = 0; i < numberOfGenerations; ++i) {
+            naturalSelection(fitness, parents);
+            reproduce(parents);
+            mutatePopulation();
+            evaluateIndividuals(fitness);
+            auto bf = max_element(population.begin(), population.end());
+            currentGenerationBestChromosome = *bf;
+            currentGenerationBestFitness = currentGenerationBestChromosome.fitness;
+            double avgFitness = accumulate(fitness.begin(), fitness.end(), 0.0)
+                    / populationSize;
+            cout << currentGenerationBestFitness.fitness << "\t" << avgFitness << "\t" << i << endl;
+
+            if (bestFitness < currentGenerationBestFitness) {
+                bestFitness = currentGenerationBestFitness;
+                bestChromosome = currentGenerationBestChromosome;
+
+                printResult(bestChromosome.order);
+            }
+
+        }
+    //}
+
+    cout << "Best fitness result: " << bestChromosome.fitness.fitness << endl;
 
     printResult(bestChromosome.order);
 
@@ -798,56 +936,39 @@ int main(int argc, char**argv) {
 //    cout << 1.0d/evaluateCityOrder(bestOrder).fitness << endl;
 
 
-    /*Vector A, B, C, D;
+//    Vector A, B, C, D;
 
-    cities.resize(4);
-    A = Vector(100,140);
-    B = Vector(185,145);
-    C = Vector(230,131);
-    D = Vector(190,40);
+//    cities.resize(4);
+//    A = Vector(100,144);
+//    B = Vector(185,145);
+//    C = Vector(230,146);
+//    D = Vector(190,40);
+//    cities = {A,B,C,D};
 
-    cities = {A,B,C,D};
+//    CityOrder order;
 
-    cout << "A,B,C,D = " << evaluateCityOrder(cities) << endl;
+//    order = {0,1,2,3};
+//    Fitness f = evaluateCityOrder(order);
+//    cout << "A,B,C,D = " << f.fitness << " ; " << vectorToString(f.times) << endl;
 
-    cities = {D,C,B,A};
+//    order = {3,2,1,0};
+//    f = evaluateCityOrder(order);
+//    cout << "D,C,B,A = " << f.fitness  << " ; " <<vectorToString(f.times) << endl;
 
-    cout << "D,C,B,A = " << evaluateCityOrder(cities) << endl;
+//    order = {0,1,3,2};
+//    f = evaluateCityOrder(order);
+//    cout << "A,B,D,C = " << f.fitness << " ; " <<vectorToString(f.times)  << endl;
 
-    cities = {A,B,D,C};
+//    order = {1,2,3,0};
+//    f = evaluateCityOrder(order);
+//    cout << "B,C,D,A = " << f.fitness  << " ; " <<vectorToString(f.times)  << endl;
 
-    cout << "A,B,D,C = " << evaluateCityOrder(cities) << endl;
-
-    cities = {B,C,D,A};
-
-    cout << "B,C,D,A = " << evaluateCityOrder(cities) << endl;
-
-    cities = {A,D,C,B};
-
-    cout << "A,D,C,B = " << evaluateCityOrder(cities) << endl;
+//    order = {0,3,2,1};
+//    f = evaluateCityOrder(order);
+//    cout << "A,D,C,B = " << f.fitness  <<" ; " <<vectorToString(f.times)  << endl;
 
 
-    cout << "Alternative evaluation" << endl;
 
-    cities = {A,B,C,D};
-
-    cout << "A,B,C,D = " << alternativeEvaluate(cities) << endl;
-
-    cities = {D,C,B,A};
-
-    cout << "D,C,B,A = " << alternativeEvaluate(cities) << endl;
-
-    cities = {A,B,D,C};
-
-    cout << "A,B,D,C = " << alternativeEvaluate(cities) << endl;
-
-    cities = {B,C,D,A};
-
-    cout << "B,C,D,A = " << alternativeEvaluate(cities) << endl;
-
-    cities = {A,D,C,B};
-
-    cout << "A,D,C,B = " << alternativeEvaluate(cities) << endl;*/
 
 
     //Test 3 points on line

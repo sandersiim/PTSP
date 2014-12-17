@@ -14,6 +14,9 @@
 \setbeamerfont{itemize/enumerate body}{size=\normalsize}
 \setbeamerfont{itemize/enumerate subbody}{size=\normalsize}
 
+\usepackage{ragged2e}   %new code
+
+\addtobeamertemplate{block begin}{}{\justifying}  %new code
 \usepackage{wrapfig}
 % additional packages
 \usepackage{times}
@@ -25,15 +28,19 @@
 \usepackage[english]{babel}
 \usepackage[latin1]{inputenc}
 \usepackage[orientation=landscape,size=a1,scale=1.1]{beamerposter}
+\usepackage{mathtools}
 \listfiles
 \graphicspath{{figures/}}
 % Display a grid to help align images
 %\beamertemplategridbackground[1cm]
 
-\title{\huge Physical Travelling Salesman Problem}
+\title{\huge Physical Traveling Salesman Problem}
 \author{Sander Siim, Karl Tarbe}
 \institute[University of Tartu]{Institute of Computer Science, University of Tartu, Tartu, Estonia}
 \date[Dec. 18 , 2014]{Dec. 18 , 2014}
+
+\DeclarePairedDelimiter\abs{\lvert}{\rvert}
+\newcommand*{\vv}[1]{\vec{\mkern0mu#1}}
 
 % abbreviations
 \usepackage{xspace}
@@ -60,26 +67,33 @@
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
       \begin{block}{Introduction}
-        The \alert{physical travelling salesman problem} (PSTP) is an abstraction into the physical world of the well-known travelling salesman optimization problem.
+        \centering
+        \begin{column}{.97\linewidth}
+        \justifying
+        The \alert{physical traveling salesman problem} (PSTP) is an abstraction into the physical world of the well-known traveling salesman optimization problem.
         \vskip1ex
 
         \begin{itemize}
-        \item In regular TSP, the objective is to find a \alert{Hamiltonian path} in a weighted graph with minimum total cost.
-        \item In PSTP, the goal is to \alert{minimize the time} that it takes to follow the trajectory of the Hamiltonian path, taking into account \alert{physical laws of motion}.
-        \item Solutions for TSP are in general \alert{not optimal} for PSTP, since force needs to be applied to change direction of motion and sharp turns are costly.
+        \item In regular TSP, the objective is to find a \alert{Hamiltonian path} in a weighted graph with minimum total cost
+        \item In PSTP, the goal is to \alert{minimize the time} that it takes to follow the trajectory of the Hamiltonian path, taking into account \alert{physical laws of motion}
+        \item Solutions for TSP are in general \alert{not optimal} for PSTP, since force needs to be applied to change direction of motion and sharp turns are costly
         \end{itemize}
+        \end{column}
       \end{block}
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       
       \begin{block}{GECCO 2005 PTSP Competition}
+      \centering
+        \begin{column}{.97\linewidth}
+        \justifying
         We followed the \alert{problem statement} from GECCO'05 conference PTSP competition. 
         \begin{columns}[T]
           \begin{column}{.53\linewidth} 
             \begin{figure}
               \centering
               \includegraphics[width=\linewidth]{byrod_solution1.png}          
-              \caption{\centering GECCO'05 competition winner Martin Byr\"{o}d's solution}
+              \caption{\centering Best result from Martin Byr\"{o}d (648 steps)}
             \end{figure}
           \end{column}
 
@@ -101,9 +115,9 @@
         \textbf{Some observations about GECCO'05 solutions:}
 
         \begin{itemize}
-            \item All best solutions used genetic algorithms.
-            \item No crossover was used, only mutations.
-            \item Most tried to first find a suitable route for visiting the cities and then optimize the corresponding trajectory. 
+            \item All best solutions used \alert{genetic algorithms}
+            \item \alert{No crossover} was used, only mutations
+            \item Most tried to first find a suitable route for visiting the cities and then optimize the corresponding trajectory
             %\item Some optimize the route incrementally.
         \end{itemize}
 
@@ -130,6 +144,7 @@
         %     %\includegraphics[width=\linewidth]{dreuw/xfigures/BayesArchitectureSignLanguage_Dreuw_01Jun06}
         %   \end{column}
         % \end{columns}
+        \end{column}
       \end{block}
 
     
@@ -137,29 +152,33 @@
 
     \end{column}
     \begin{column}{.305\linewidth}
-      \begin{block}{Our Approach}
-        Similarly to GECCO'05 competition, we divide the problem into \alert{two phases}. In the first phase, we find an optimal \alert{route for visiting} all the cities. In the second phase, we optimize the \alert{corresponding trajectory} \ie the sequence of applied force vectors. We also use an evolutionary approach in both phases.
+      \begin{block}{Our Implementation}
+      \centering
+        \begin{column}{.97\linewidth}
+        \justifying
+        The natural approach to PSTP is to divide the problem into \alert{two phases}. In the first phase, we find an optimal \alert{route for visiting} all the cities. In the second phase, we optimize the \alert{corresponding trajectory} \ie the sequence of applied force vectors. %We also use an evolutionary approach in both phases.
         \vskip1ex
         \noindent{\textbf{Finding optimal route}}
         
-        For finding a good route candidate, a heuristic needs to be used for estimating approximate time of traversing a given route. Looking at the solutions of GECCO'05 competition, it was immediately clear that an optimal route minimizes the \alert{total turning angle} and smooth curves are favorable.
+        For finding a good route candidate, the heuristic should take into account both distances and angles between visited cities. We first experimented with approximating \alert{trajectories as circle arcs} and using circular motion formulas to estimate traversal time. However, this did not prove to be a good objective estimate.
 
-        \[f_1(r) = 1 / \tau\]
-        Need nice picture with circle's to illustrate trajectory estimation.
+        We ultimately used fitness function from Rok Sibanc's solution, which is defined for every three cities as
+        \vskip-2ex
+
+        \[f_1(A,B,C) = (\sqrt{\abs{\vv{AB}}} + \sqrt{\abs{\vv{BC}}}) \cdot (3.4 + \cos(\angle{ABC})) .\]
+
+        We used a simple genetic algorithm by \alert{mutating the whole population} and selecting the best candidates among parents and siblings for the next generation. Mutation was done by \alert{swapping two random cities} in the route. 
 
         \vskip1ex
         \noindent{\textbf{Generating optimal trajectory}}
         
         %We have good route. Need to generate trajectory with force vectors. Explain PID-controller and genetic algorithm.
 
-        Our first approach for optimizing the trajectory was to use a \alert{proportional-integral-derivative} (PID) controller.
-        The reasoning was, that this would significantly narrow the search space. For every segment on the route, parameters for PID
-        controller were evolved using a genetic algorithm. This had the disadvantage that salesman was decelerating when approaching a
-        city.
+        Our first approach for optimizing the trajectory was to use a \alert{proportional-integral-derivative} (PID) controller and evolving its parameters with a genetic algorithm. The reasoning was, that this would significantly narrow the search space. However, this had the disadvantage that the salesman always decelerated when approaching a city.
 
         \vskip1ex
 
-        Later, we used a genetic algorithm directly on the sequence of force vectors. The \alert{fitness function} $f_2$ is simple: for trajectory $t$, fitness is given by \[f_2(t) = N + (1 / d) + (1 / T) ,\]
+        Later, we used a genetic algorithm with \alert{tournament selection} and a \alert{sliding window} directly on the force vector sequence. The \alert{fitness function} $f_2$ is simple: for trajectory $t$, fitness is given by \[f_2(t) = N + (1 / d) + (1 / T) ,\]
         where $N$ is the number of cities visited, $d$ is the euclidean distance to the next city and $T$ is total elapsed time.
 
         \vskip1ex
@@ -173,8 +192,8 @@
 
         \vskip1ex
 
-        \alert{Tournament selection} with size 3 was used for selecting trajectories for parenting the next generation. Sliding time window was used to find solutions in reasonable time.
-
+         %Sliding time window was used to find solutions in reasonable time.
+        \end{column}
       \end{block}
 
       % \begin{block}{Feature Selection and Model Combination}
@@ -220,23 +239,35 @@
     
     \begin{column}{.305\linewidth}
 
-      \begin{block}{Results of Our Algorithm}
+      \begin{block}{Best Achieved Solution}
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        
-        How well did we do compared to others?
+        \centering
+        \begin{column}{.97\linewidth}
+        \justifying
+        Our best solution solved the competition map in 703 steps.
+
+        \begin{figure}
+          \centering
+          \includegraphics[width=0.9\linewidth]{our_best.png}          
+          \caption{\centering Our best solution, 703 time steps}
+        \end{figure}
+
+        Our result is only slightly behind from TOP 4 of GECCO'05. It can be seen that the route is optimized by \alert{favoring smooth curves} over sharp turns. The total computation for the solution ran under a minute on Intel i5 4200u @1.60 GHz.
+        \end{column}
       \end{block}
       
   
         
                 
       \begin{block}{Conclusion}
+      
         \begin{itemize}
-        \item Our solution is definitely in the right direction, but genetic algorithm parameters for best route need tweaking
-        \item We seeem to have established a fairly objective heuristic for best route, which favors smooth curves over sharp corners in the trajectory
-        \item A genetic algorithm is a good approach to optimizing the trajectory for given route and our implementation does this well
-        \item An even challenging problem is given in ... TODO
+        \item \alert{Genetic algorithms} have proven useful for PSTP problem
+        \item Our solution is definitely in the right direction, but the route could be improved with \alert{tweaking genetic algorithm parameters} or using clever crossover operations
+        \item A more intelligent fitness function could be constructed which approximates curvature of the whole trajectory
+        \item An even challenging variant of PSTP includes real-time motion planning and obstacles on the map
         \end{itemize}
-        \vspace{-1ex}
+
       \end{block}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
