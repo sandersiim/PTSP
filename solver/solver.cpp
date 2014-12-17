@@ -35,13 +35,13 @@ vector<Action> globalActs;
 
 int windowStart;
 int windowEnd;
-const size_t populationSize = 10;
-const size_t numberOfParents = 4;
+const size_t populationSize = 40;
+const size_t numberOfParents = 7;
 
-const int timeWindow = 50;
-const int totalSteps = 1000;
-const int timeIncresement = 15;
-const int generations = 1000;
+const int timeWindow = 90;
+const int totalSteps = 750;
+const int timeIncresement = 8;
+const int generations = 15000;
 
 
 vector<Vector> cities;
@@ -52,8 +52,8 @@ normal_distribution<double> normalDist(0,1);
 uniform_int_distribution<> geneDist(0,4);
 uniform_int_distribution<> disMating(0, numberOfParents - 1);
 uniform_int_distribution<> disPopulation(0, populationSize - 1);
-binomial_distribution<> swapDist(80, 0.5);
-bernoulli_distribution flipDist(0.07);
+binomial_distribution<> swapDist(40, 0.3);
+bernoulli_distribution flipDist(0.06);
 uniform_int_distribution<> swapChooseDist(0, timeWindow-2);
 uniform_int_distribution<> flipChooseDist(0, timeWindow-1);
 
@@ -294,7 +294,6 @@ int main(int argc, char**argv) {
     bool printStat = false;
     for (size_t t = 0; t + timeIncresement < totalSteps; t += timeIncresement) {
         if (t != 0) {
-            cout << "Increase timewindow!" << endl;
             moveTime(population);
         }
         windowStart = t;
@@ -302,11 +301,23 @@ int main(int argc, char**argv) {
         if (windowEnd > totalSteps)
             windowEnd = totalSteps;
 
-        for (size_t i = 0; i < generations; ++i) {
+        double prevPopAvg = 0;
+        double prevMax = 0;
+
+        size_t i = 0;
+        for (size_t converge = 0; converge < generations; ++converge,++i) {
             evaluateAll();
+            calcStatistics(population, avg, max);
+            if (avg > prevPopAvg) {
+                prevPopAvg = avg;
+                converge = 0;
+            }
+            if (max > prevMax) {
+                prevMax = max;
+                converge = 0;
+            }
             printStat = !(i % 0xfff);
             if (printStat) {
-                calcStatistics(population, avg, max);
                 cout << "Pop: avg: " << avg << "\tmax: " << max << "\t";
             }
             naturalSelection(parents);
@@ -315,7 +326,9 @@ int main(int argc, char**argv) {
                 cout << "Par: avg: " << avg << "\tmax: " << max << endl;
             }
             reproduce(parents);
+            ++i;
         }
+        cout << "Converged with " << i << " generations!" << endl;
     }
 
     evaluateAll();
