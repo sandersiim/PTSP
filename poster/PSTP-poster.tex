@@ -70,13 +70,13 @@
         \centering
         \begin{column}{.97\linewidth}
         \justifying
-        The \alert{physical traveling salesman problem} (PSTP) is an abstraction into the physical world of the well-known traveling salesman optimization problem.
+        The \alert{physical traveling salesman problem} (PTSP) is an abstraction into the physical world of the well-known traveling salesman optimization problem.
         \vskip1ex
 
         \begin{itemize}
         \item In regular TSP, the objective is to find a \alert{Hamiltonian path} in a weighted graph with minimum total cost
-        \item In PSTP, the goal is to \alert{minimize the time} that it takes to follow the trajectory of the Hamiltonian path, taking into account \alert{physical laws of motion}
-        \item Solutions for TSP are in general \alert{not optimal} for PSTP, since force needs to be applied to change direction of motion and sharp turns are costly
+        \item In PTSP, the goal is to \alert{minimize the time} that it takes to follow the trajectory of the Hamiltonian path, taking into account \alert{physical laws of motion}
+        \item Solutions for TSP are in general \alert{not optimal} for PTSP, since force needs to be applied to change direction of motion and sharp turns are costly
         \end{itemize}
         \end{column}
       \end{block}
@@ -156,7 +156,7 @@
       \centering
         \begin{column}{.97\linewidth}
         \justifying
-        The natural approach to PSTP is to divide the problem into \alert{two phases}. In the first phase, we find an optimal \alert{route for visiting} all the cities. In the second phase, we optimize the \alert{corresponding trajectory} \ie the sequence of applied force vectors. %We also use an evolutionary approach in both phases.
+        The natural approach to PTSP is to divide the problem into \alert{two phases}. In the first phase, we find an optimal \alert{route for visiting} all the cities. In the second phase, we optimize the \alert{corresponding trajectory} \ie the sequence of applied force vectors. %We also use an evolutionary approach in both phases.
         \vskip1ex
         \noindent{\textbf{Finding optimal route}}
         
@@ -262,10 +262,10 @@
       \begin{block}{Conclusion}
       
         \begin{itemize}
-        \item \alert{Genetic algorithms} have proven useful for PSTP problem
+        \item \alert{Genetic algorithms} have proven useful for PTSP problem
         \item Our solution is definitely in the right direction, but the route could be improved with \alert{tweaking genetic algorithm parameters} or using clever crossover operations
         \item A more intelligent fitness function could be constructed which approximates curvature of the whole trajectory
-        \item An even challenging variant of PSTP includes real-time motion planning and obstacles on the map
+        \item An even challenging variant of PTSP includes real-time motion planning and obstacles on the map
         \end{itemize}
 
       \end{block}
